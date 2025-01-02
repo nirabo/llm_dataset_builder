@@ -84,9 +84,9 @@ jobs:
       - name: Compress binary (Windows)
         if: matrix.os == 'windows-2022'
         run: |
-          cd target/release
-          7z a ../../${{ matrix.asset_name }}.zip llm_dataset_builder.exe
-          cd ../..
+          cd target/${{ matrix.target }}/release
+          7z a ../../../${{ matrix.asset_name }}.zip llm_dataset_builder.exe
+          cd ../../..
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
