@@ -40,13 +40,28 @@ impl OllamaProcessor {
     }
 
     fn sanitize_json(json: &str) -> String {
+        // First try to fix any truncated JSON by finding the last complete object
+        let truncated_fix = if !json.trim_end().ends_with('}') {
+            if let Some(last_complete) = json.rfind("}}") {
+                format!("{}}}", &json[..=last_complete])
+            } else {
+                json.to_string()
+            }
+        } else {
+            json.to_string()
+        };
+
         // Remove any trailing commas in arrays
         let re = regex::Regex::new(r",(\s*[\]}])").unwrap();
-        let json = re.replace_all(json, "$1").to_string();
+        let json = re.replace_all(&truncated_fix, "$1").to_string();
         
         // Remove newlines and extra whitespace between JSON elements
         let re = regex::Regex::new(r"\s*\n\s*").unwrap();
         let json = re.replace_all(&json, " ").to_string();
+
+        // Escape any unescaped quotes in strings
+        let re = regex::Regex::new(r#"(?P<before>[^\\])"(?P<after>[^",:}\]])"#).unwrap();
+        let json = re.replace_all(&json, r#"$before\"$after"#).to_string();
         
         json
     }
@@ -106,8 +121,10 @@ impl OllamaProcessor {
             Ok(value) => {
                 if let Some(questions) = value.get("questions") {
                     if let Ok(items) = serde_json::from_value::<Vec<ProcessedItem>>(questions.clone()) {
-                        println!("Successfully parsed {} question-answer pairs", items.len());
-                        return Ok(items);
+                        if !items.is_empty() {
+                            println!("Successfully parsed {} question-answer pairs", items.len());
+                            return Ok(items);
+                        }
                     }
                 }
             }
