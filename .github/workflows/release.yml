@@ -18,15 +18,55 @@ jobs:
       - name: Get version
         id: version
         run: echo "version=$(date +'%Y.%m.%d.%H%M')" >> "$GITHUB_OUTPUT"
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          # Get the last two commits to find the latest changes
+          COMMITS=$(git log -2 --pretty=format:"%s")
+          
+          # Create release notes content
+          cat << EOF > release_notes.md
+          # Release v${{ steps.version.outputs.version }}
+          
+          ## What's Changed
+          
+          $(git log -1 --pretty=format:"%b")
+          
+          ## Recent Changes
+          $(git log -10 --pretty=format:"* %s")
+          
+          ## Build Information
+          * This release includes builds for:
+            * Linux (x86_64)
+            * macOS (ARM64)
+          
+          ## Installation
+          Download the appropriate binary for your system and extract it:
+          
+          ### Linux
+          ```bash
+          tar xzf llm_dataset_builder-linux-x86_64.tar.gz
+          ```
+          
+          ### macOS (Apple Silicon)
+          ```bash
+          tar xzf llm_dataset_builder-darwin-arm64.tar.gz
+          ```
+          EOF
+          
+          # Store release notes for the release step
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          cat release_notes.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           name: Release v${{ steps.version.outputs.version }}
           tag_name: v${{ steps.version.outputs.version }}
+          body: ${{ env.RELEASE_NOTES }}
           draft: false
           prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
