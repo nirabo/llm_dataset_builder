@@ -49,6 +49,25 @@ impl OllamaProcessor {
             endpoint,
         }
     }
+
+    fn sanitize_json(json: &str) -> String {
+        // Remove any trailing commas in arrays
+        let re = regex::Regex::new(r",(\s*[\]}])").unwrap();
+        let json = re.replace_all(json, "$1").to_string();
+        
+        // Remove newlines and extra whitespace between JSON elements
+        let re = regex::Regex::new(r"\s*\n\s*").unwrap();
+        let json = re.replace_all(&json, " ").to_string();
+        
+        // Ensure all JSON special characters in strings are properly escaped
+        let re = regex::Regex::new(r#"([^\\])"#).unwrap();
+        let json = re.replace_all(&json, r#"\$1"#).to_string();
+        
+        // Remove any null bytes or invalid UTF-8
+        json.chars()
+            .filter(|c| !c.is_control() && *c != '\0')
+            .collect()
+    }
     
     pub async fn process_file(&self, file_path: &Path) -> Result<Vec<ProcessedItem>> {
         let content = std::fs::read_to_string(file_path)?;
@@ -56,13 +75,10 @@ impl OllamaProcessor {
         
         let system_prompt = "You are a helpful assistant that generates question-answer pairs from the given text. \
             Generate 20 relevant questions and their corresponding answers based on the content. \
-            You MUST respond with a valid JSON object. Do not include any additional text or formatting. \
+            You MUST respond with a valid JSON object in a single line. Do not include any newlines or extra whitespace. \
+            IMPORTANT: Do not use raw JSON special characters in the text. Escape all quotes, braces, and special characters. \
             The response must be in this exact format (with your own questions and answers):\n\
-            {\"questions\":[\
-                {\"question\":\"First question here?\",\"answer\":\"First answer here.\"},\
-                {\"question\":\"Second question here?\",\"answer\":\"Second answer here.\"}\
-            ]}";
-            
+            {\"questions\":[{\"question\":\"What is X?\",\"answer\":\"X is...\"},{\"question\":\"How does Y work?\",\"answer\":\"Y works by...\"}]}";
             
         let request = OllamaRequest {
             model: "exaone35max".to_string(),
@@ -97,22 +113,25 @@ impl OllamaProcessor {
         let response: OllamaResponse = response.json().await?;
         println!("Received response from Ollama");
         
+        // Sanitize the JSON response
+        let sanitized_response = Self::sanitize_json(&response.response);
+        
         // Try to parse as wrapped questions first
-        match serde_json::from_str::<QuestionWrapper>(&response.response) {
+        match serde_json::from_str::<QuestionWrapper>(&sanitized_response) {
             Ok(wrapper) => {
                 println!("Successfully parsed {} question-answer pairs", wrapper.questions.len());
                 Ok(wrapper.questions)
             }
             Err(wrapper_err) => {
                 // Try to parse as direct array
-                match serde_json::from_str::<Vec<ProcessedItem>>(&response.response) {
+                match serde_json::from_str::<Vec<ProcessedItem>>(&sanitized_response) {
                     Ok(items) => {
                         println!("Successfully parsed {} question-answer pairs", items.len());
                         Ok(items)
                     }
                     Err(array_err) => {
                         // If array parsing fails, try parsing as single item
-                        match serde_json::from_str::<ProcessedItem>(&response.response) {
+                        match serde_json::from_str::<ProcessedItem>(&sanitized_response) {
                             Ok(item) => {
                                 println!("Got single question-answer pair, converting to array");
                                 Ok(vec![item])
