@@ -41,12 +41,6 @@ jobs:
             name: linux-x86_64
             binary_path: target/release/llm_dataset_builder
             asset_name: llm_dataset_builder-linux-x86_64
-          
-          - os: macos-14
-            target: x86_64-apple-darwin
-            name: darwin-x86_64
-            binary_path: target/release/llm_dataset_builder
-            asset_name: llm_dataset_builder-darwin-x86_64
 
           - os: macos-14
             target: aarch64-apple-darwin
@@ -54,11 +48,18 @@ jobs:
             binary_path: target/release/llm_dataset_builder
             asset_name: llm_dataset_builder-darwin-arm64
 
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
-            name: windows-x86_64
-            binary_path: target/release/llm_dataset_builder.exe
-            asset_name: llm_dataset_builder-windows-x86_64.exe
+          # Commented out for now to reduce build time
+          # - os: macos-14
+          #   target: x86_64-apple-darwin
+          #   name: darwin-x86_64
+          #   binary_path: target/release/llm_dataset_builder
+          #   asset_name: llm_dataset_builder-darwin-x86_64
+
+          # - os: windows-2022
+          #   target: x86_64-pc-windows-msvc
+          #   name: windows-x86_64
+          #   binary_path: target/release/llm_dataset_builder.exe
+          #   asset_name: llm_dataset_builder-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -81,27 +82,11 @@ jobs:
           tar czf ../../../${{ matrix.asset_name }}.tar.gz llm_dataset_builder
           cd ../../..
 
-      - name: Compress binary (Windows)
-        if: matrix.os == 'windows-2022'
-        run: |
-          cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.asset_name }}.zip llm_dataset_builder.exe
-          cd ../../..
-
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         if: matrix.os != 'windows-2022'
         with:
           tag_name: v${{ needs.create-release.outputs.version }}
           files: ${{ matrix.asset_name }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release Asset (Windows)
-        uses: softprops/action-gh-release@v1
-        if: matrix.os == 'windows-2022'
-        with:
-          tag_name: v${{ needs.create-release.outputs.version }}
-          files: ${{ matrix.asset_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
