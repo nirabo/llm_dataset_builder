@@ -40,12 +40,12 @@ impl OllamaProcessor {
             if let Some(last_complete) = json.rfind(r#","answer":"#) {
                 // Find the last complete question-answer pair
                 if let Some(last_question) = json[..last_complete].rfind(r#"{"question":"#) {
-                    format!("{}]}}}}", &json[..last_question])
+                    format!("{}]}}", &json[..last_question])
                 } else {
-                    format!("{}}}]}}}}", &json[..last_complete])
+                    format!("{}}]}}", &json[..last_complete])
                 }
             } else if let Some(last_complete) = json.rfind("}}") {
-                format!("{}}}}}", &json[..=last_complete])
+                format!("{}}}", &json[..=last_complete])
             } else {
                 json.to_string()
             }
@@ -62,7 +62,8 @@ impl OllamaProcessor {
         let json = re.replace_all(&json, " ").to_string();
 
         // Fix Windows paths by replacing backslashes with forward slashes
-        let re = regex::Regex::new(r"\\+").unwrap();
+        // but preserve escaped quotes
+        let re = regex::Regex::new(r#"\\(?!["])"#).unwrap(); // Negative lookahead for quote
         let json = re.replace_all(&json, "/").to_string();
         
         json
