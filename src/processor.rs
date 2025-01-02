@@ -67,10 +67,19 @@ impl OllamaProcessor {
         
         json
     }
+
+    fn count_words(text: &str) -> usize {
+        text.split_whitespace().count()
+    }
     
     pub async fn process_file(&self, file_path: &Path) -> Result<Vec<ProcessedItem>> {
         let content = std::fs::read_to_string(file_path)?;
         println!("Processing file: {:?}", file_path);
+        
+        // Count words and calculate number of questions
+        let word_count = Self::count_words(&content);
+        let num_questions = (word_count as f64 / 10.0).ceil() as usize;
+        println!("Word count: {}, Generating {} questions", word_count, num_questions);
         
         // Extract version from filename
         let version = file_path
@@ -82,7 +91,7 @@ impl OllamaProcessor {
         let content_with_version = format!("Version: {}\n\nChangelog:\n{}", version, content);
         
         let system_prompt = format!("You are a helpful assistant that generates question-answer pairs from the given text. \
-            Generate 20 relevant questions and their corresponding answers based on the content. \
+            Generate {} relevant questions and their corresponding answers based on the content. \
             This is about version {}. IMPORTANT: Include the version number in EVERY question when referring to features, changes, or updates. \
             You MUST respond with a valid JSON object in a single line. Do not include any newlines or extra whitespace. \
             IMPORTANT: Follow these rules for JSON safety:\n\
@@ -92,7 +101,7 @@ impl OllamaProcessor {
             4. Keep answers concise to avoid truncation\n\
             The response must be in this exact format (with your own questions and answers):\n\
             {{\"questions\":[{{\"question\":\"What was fixed in {}?\",\"answer\":\"In {} the following was fixed...\"}}]}}", 
-            version, version, version);
+            num_questions, version, version, version);
             
         let request = OllamaRequest {
             model: "exaone35max".to_string(),
