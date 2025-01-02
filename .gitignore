@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.DS_Store
+/output/
+processed_data.json
