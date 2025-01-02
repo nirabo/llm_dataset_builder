@@ -25,9 +25,12 @@ struct Args {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessedItem {
-    question: String,
-    answer: String,
+    #[serde(rename = "question")]
+    pub question: String,
+    #[serde(rename = "answer")]
+    pub answer: String,
 }
 
 async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>> {

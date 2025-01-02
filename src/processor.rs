@@ -115,6 +115,7 @@ impl OllamaProcessor {
         
         // Sanitize the JSON response
         let sanitized_response = Self::sanitize_json(&response.response);
+        println!("Sanitized response: {}", sanitized_response);
         
         // Try to parse as wrapped questions first
         match serde_json::from_str::<QuestionWrapper>(&sanitized_response) {
@@ -123,6 +124,8 @@ impl OllamaProcessor {
                 Ok(wrapper.questions)
             }
             Err(wrapper_err) => {
+                println!("Failed to parse as wrapped questions: {}", wrapper_err);
+                
                 // Try to parse as direct array
                 match serde_json::from_str::<Vec<ProcessedItem>>(&sanitized_response) {
                     Ok(items) => {
@@ -130,16 +133,19 @@ impl OllamaProcessor {
                         Ok(items)
                     }
                     Err(array_err) => {
-                        // If array parsing fails, try parsing as single item
+                        println!("Failed to parse as array: {}", array_err);
+                        
+                        // Try to parse as single item
                         match serde_json::from_str::<ProcessedItem>(&sanitized_response) {
                             Ok(item) => {
-                                println!("Got single question-answer pair, converting to array");
+                                println!("Successfully parsed single question-answer pair");
                                 Ok(vec![item])
                             }
-                            Err(_) => {
-                                println!("Error parsing response: Unable to parse as wrapped questions ({}), array ({}), or single item", wrapper_err, array_err);
+                            Err(item_err) => {
+                                println!("Failed to parse as single item: {}", item_err);
                                 println!("Raw response: {}", response.response);
-                                Err(anyhow!("Failed to parse Ollama response"))
+                                Err(anyhow!("Failed to parse Ollama response: wrapper error: {}, array error: {}, item error: {}", 
+                                    wrapper_err, array_err, item_err))
                             }
                         }
                     }
