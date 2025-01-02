@@ -42,7 +42,14 @@ impl OllamaProcessor {
     fn sanitize_json(json: &str) -> String {
         // First try to fix any truncated JSON by finding the last complete object
         let truncated_fix = if !json.trim_end().ends_with('}') {
-            if let Some(last_complete) = json.rfind("}}") {
+            if let Some(last_complete) = json.rfind(r#","answer":"#) {
+                // Find the last complete question-answer pair
+                if let Some(last_question) = json[..last_complete].rfind(r#"{"question":"#) {
+                    format!("{}]}}", &json[..last_question])
+                } else {
+                    format!("{}}]}}", &json[..last_complete])
+                }
+            } else if let Some(last_complete) = json.rfind("}}") {
                 format!("{}}}", &json[..=last_complete])
             } else {
                 json.to_string()
@@ -59,9 +66,9 @@ impl OllamaProcessor {
         let re = regex::Regex::new(r"\s*\n\s*").unwrap();
         let json = re.replace_all(&json, " ").to_string();
 
-        // Escape any unescaped quotes in strings
-        let re = regex::Regex::new(r#"(?P<before>[^\\])"(?P<after>[^",:}\]])"#).unwrap();
-        let json = re.replace_all(&json, r#"$before\"$after"#).to_string();
+        // Fix Windows paths by replacing backslashes with forward slashes
+        let re = regex::Regex::new(r"\\+").unwrap();
+        let json = re.replace_all(&json, "/").to_string();
         
         json
     }
@@ -83,7 +90,11 @@ impl OllamaProcessor {
             Generate 20 relevant questions and their corresponding answers based on the content. \
             This is about version {}. IMPORTANT: Include the version number in EVERY question when referring to features, changes, or updates. \
             You MUST respond with a valid JSON object in a single line. Do not include any newlines or extra whitespace. \
-            IMPORTANT: Do not use raw JSON special characters in the text. Escape all quotes, braces, and special characters. \
+            IMPORTANT: Follow these rules for JSON safety:\n\
+            1. Use single backslash for escaping: '\\\\' not multiple backslashes\n\
+            2. For Windows paths, use forward slashes instead: 'C:/Users' not 'C:\\\\Users'\n\
+            3. Escape quotes with a single backslash: '\\\"' not '\\\\\"'\n\
+            4. Keep answers concise to avoid truncation\n\
             The response must be in this exact format (with your own questions and answers):\n\
             {{\"questions\":[{{\"question\":\"What was fixed in {}?\",\"answer\":\"In {} the following was fixed...\"}}]}}", 
             version, version, version);
