@@ -165,6 +165,17 @@ async fn main() -> Result<()> {
         println!("\nProcessing file: {:?}", file);
         let items = processor.process_file(&file).await?;
         
+        // Generate output filename based on input file
+        let file_stem = file.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+        let output_file = PathBuf::from(&args.output_dir)
+            .join(format!("{}_qa.json", file_stem));
+        
+        // Save questions for this file
+        std::fs::write(&output_file, serde_json::to_string_pretty(&items)?)?;
+        println!("Saved {} question-answer pairs to {:?}", items.len(), output_file);
+        
         println!("\nGenerated Questions and Answers:");
         println!("--------------------------------");
         for (i, item) in items.iter().enumerate() {
@@ -177,12 +188,13 @@ async fn main() -> Result<()> {
         all_items.extend(items);
     }
     
-    // Save results
-    let output_file = PathBuf::from(&args.output_dir).join("processed_data.json");
+    // Save combined results
+    let output_file = PathBuf::from(&args.output_dir).join("all_qa.json");
     std::fs::write(&output_file, serde_json::to_string_pretty(&all_items)?)?;
     
-    println!("\nProcessing complete! Generated {} question-answer pairs.", all_items.len());
-    println!("Results saved to: {:?}", output_file);
+    println!("\nProcessing complete! Generated {} total question-answer pairs.", all_items.len());
+    println!("Combined results saved to: {:?}", output_file);
+    println!("Individual file results saved as [filename]_qa.json in the output directory");
     
     Ok(())
 }
