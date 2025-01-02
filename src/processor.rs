@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use serde_json::Value;
 
 use crate::ProcessedItem;
 
@@ -30,18 +31,6 @@ struct QuestionWrapper {
     questions: Vec<ProcessedItem>,
 }
 
-#[derive(Debug, Deserialize)]
-struct OllamaError {
-    error: OllamaErrorDetails,
-}
-
-#[derive(Debug, Deserialize)]
-struct OllamaErrorDetails {
-    code: u32,
-    message: String,
-    documentation: Option<String>,
-}
-
 impl OllamaProcessor {
     pub fn new(endpoint: String) -> Self {
         Self {
@@ -59,14 +48,7 @@ impl OllamaProcessor {
         let re = regex::Regex::new(r"\s*\n\s*").unwrap();
         let json = re.replace_all(&json, " ").to_string();
         
-        // Ensure all JSON special characters in strings are properly escaped
-        let re = regex::Regex::new(r#"([^\\])"#).unwrap();
-        let json = re.replace_all(&json, r#"\$1"#).to_string();
-        
-        // Remove any null bytes or invalid UTF-8
-        json.chars()
-            .filter(|c| !c.is_control() && *c != '\0')
-            .collect()
+        json
     }
     
     pub async fn process_file(&self, file_path: &Path) -> Result<Vec<ProcessedItem>> {
@@ -98,16 +80,7 @@ impl OllamaProcessor {
             
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            if let Ok(error) = serde_json::from_str::<OllamaError>(&error_text) {
-                return Err(anyhow!(
-                    "Ollama API error: {} (code: {}). Documentation: {}", 
-                    error.error.message,
-                    error.error.code,
-                    error.error.documentation.unwrap_or_default()
-                ));
-            } else {
-                return Err(anyhow!("Ollama API error: {}", error_text));
-            }
+            return Err(anyhow!("Ollama API error: {}", error_text));
         }
             
         let response: OllamaResponse = response.json().await?;
@@ -117,40 +90,20 @@ impl OllamaProcessor {
         let sanitized_response = Self::sanitize_json(&response.response);
         println!("Sanitized response: {}", sanitized_response);
         
-        // Try to parse as wrapped questions first
-        match serde_json::from_str::<QuestionWrapper>(&sanitized_response) {
-            Ok(wrapper) => {
-                println!("Successfully parsed {} question-answer pairs", wrapper.questions.len());
-                Ok(wrapper.questions)
-            }
-            Err(wrapper_err) => {
-                println!("Failed to parse as wrapped questions: {}", wrapper_err);
-                
-                // Try to parse as direct array
-                match serde_json::from_str::<Vec<ProcessedItem>>(&sanitized_response) {
-                    Ok(items) => {
+        // Try parsing as raw JSON first
+        match serde_json::from_str::<Value>(&sanitized_response) {
+            Ok(value) => {
+                if let Some(questions) = value.get("questions") {
+                    if let Ok(items) = serde_json::from_value::<Vec<ProcessedItem>>(questions.clone()) {
                         println!("Successfully parsed {} question-answer pairs", items.len());
-                        Ok(items)
-                    }
-                    Err(array_err) => {
-                        println!("Failed to parse as array: {}", array_err);
-                        
-                        // Try to parse as single item
-                        match serde_json::from_str::<ProcessedItem>(&sanitized_response) {
-                            Ok(item) => {
-                                println!("Successfully parsed single question-answer pair");
-                                Ok(vec![item])
-                            }
-                            Err(item_err) => {
-                                println!("Failed to parse as single item: {}", item_err);
-                                println!("Raw response: {}", response.response);
-                                Err(anyhow!("Failed to parse Ollama response: wrapper error: {}, array error: {}, item error: {}", 
-                                    wrapper_err, array_err, item_err))
-                            }
-                        }
+                        return Ok(items);
                     }
                 }
             }
+            Err(e) => println!("Failed to parse as raw JSON: {}", e),
         }
+        
+        println!("Raw response: {}", response.response);
+        Err(anyhow!("Failed to parse Ollama response"))
     }
 }
