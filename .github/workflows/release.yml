@@ -42,13 +42,13 @@ jobs:
             binary_path: target/release/llm_dataset_builder
             asset_name: llm_dataset_builder-linux-x86_64
           
-          - os: macos-12
+          - os: macos-14
             target: x86_64-apple-darwin
             name: darwin-x86_64
             binary_path: target/release/llm_dataset_builder
             asset_name: llm_dataset_builder-darwin-x86_64
 
-          - os: macos-12
+          - os: macos-14
             target: aarch64-apple-darwin
             name: darwin-arm64
             binary_path: target/release/llm_dataset_builder
