@@ -26,11 +26,6 @@ struct OllamaResponse {
     response: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct QuestionWrapper {
-    questions: Vec<ProcessedItem>,
-}
-
 impl OllamaProcessor {
     pub fn new(endpoint: String) -> Self {
         Self {
