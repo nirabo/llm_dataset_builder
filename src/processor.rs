@@ -55,17 +55,28 @@ impl OllamaProcessor {
         let content = std::fs::read_to_string(file_path)?;
         println!("Processing file: {:?}", file_path);
         
-        let system_prompt = "You are a helpful assistant that generates question-answer pairs from the given text. \
+        // Extract version from filename
+        let version = file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown version");
+        
+        // Add version context to the content
+        let content_with_version = format!("Version: {}\n\nChangelog:\n{}", version, content);
+        
+        let system_prompt = format!("You are a helpful assistant that generates question-answer pairs from the given text. \
             Generate 20 relevant questions and their corresponding answers based on the content. \
+            This is about version {}. IMPORTANT: Include the version number in EVERY question when referring to features, changes, or updates. \
             You MUST respond with a valid JSON object in a single line. Do not include any newlines or extra whitespace. \
             IMPORTANT: Do not use raw JSON special characters in the text. Escape all quotes, braces, and special characters. \
             The response must be in this exact format (with your own questions and answers):\n\
-            {\"questions\":[{\"question\":\"What is X?\",\"answer\":\"X is...\"},{\"question\":\"How does Y work?\",\"answer\":\"Y works by...\"}]}";
+            {{\"questions\":[{{\"question\":\"What was fixed in {}?\",\"answer\":\"In {} the following was fixed...\"}}]}}", 
+            version, version, version);
             
         let request = OllamaRequest {
             model: "exaone35max".to_string(),
-            prompt: content,
-            system: system_prompt.to_string(),
+            prompt: content_with_version,
+            system: system_prompt,
             format: "json".to_string(),
             stream: false,
             temperature: 0.0,
