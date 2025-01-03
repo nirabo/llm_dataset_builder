@@ -328,7 +328,7 @@ impl OllamaProcessor {
             let response = self.client
                 .post(&format!("{}/api/chat", self.endpoint))
                 .json(&serde_json::json!({
-                    "model": "qwen2514bmax",
+                    "model": "m/qwen2514bmax",
                     "messages": [
                         {
                             "role": "system",

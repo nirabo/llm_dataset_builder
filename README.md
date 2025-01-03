@@ -1,81 +1,159 @@
 # LLM Dataset Builder
 
-A Rust-based tool for building question-answer datasets from various sources using Ollama. This tool helps you create training datasets for Large Language Models by generating question-answer pairs from:
-
-- GitHub repositories (markdown and text files)
-- GitHub release notes
-- Web URLs
-- Local files and directories
+A Rust application that automatically generates high-quality question-answer pairs from documentation, making it perfect for training Large Language Models (LLMs). The application uses Ollama with the Qwen 25B model to process various data sources and creates targeted questions based on content length and complexity.
 
 ## Features
 
-- Multiple data source support:
-  - GitHub repository files (markdown/text)
-  - GitHub release notes
-  - Web URLs
-  - Local files and directories
-- Automatic question-answer pair generation using Ollama
-- Customizable number of questions per document (default: 20)
-- JSON output format for easy integration
-- Interactive command-line interface
+### Smart Question Generation
+- Automatically calculates the optimal number of questions based on content length
+- Base target: 1 question per 10 words of content
+- Adds 25% extra questions (minimum 2) to ensure quality coverage
+- Example:
+  ```
+  100 words → 10 base questions + 3 extra = 13 questions
+  20 words → 2 base questions + 2 extra = 4 questions
+  ```
 
-## Prerequisites
+### Recursive Content Processing
+If the initial question generation doesn't meet the target:
+1. First attempts to process the entire section
+2. If insufficient questions, splits content by headings
+3. If still insufficient, splits content by paragraphs
+4. Each subsection gets a proportional number of questions based on its word count
 
-- Rust (latest stable version)
-- [Ollama](https://ollama.ai) installed and running locally
-- Internet connection for fetching online resources
+### Intelligent File Handling
+- Outputs in JSONL format (one JSON object per line)
+- Checks for existing question files before processing
+- Converts older JSON files to JSONL format automatically
+- Skips processing if sufficient questions already exist
+- Maintains quality by ensuring minimum question thresholds
+
+### Multiple Data Source Support
+- Local files
+- URLs (web pages)
+- GitHub repositories
+- GitHub release notes
+- Handles both Markdown and plain text content
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/technovangelist/llm_dataset_builder.git
-cd llm_dataset_builder
-```
+### Option 1: Download Pre-built Binary (Recommended)
+1. Go to the [Releases page](https://github.com/technovangelist/llm_dataset_builder/releases)
+2. Download the latest binary for your platform:
+   - `llm_dataset_builder-macos` for macOS
+   - `llm_dataset_builder-linux` for Linux
+3. Make the binary executable:
+   ```bash
+   chmod +x llm_dataset_builder-*
+   ```
 
-2. Build the project:
-```bash
-cargo build --release
-```
+### Option 2: Build from Source
+If you want to build from source:
+1. Ensure you have Rust installed
+2. Clone this repository
+3. Build the project:
+   ```bash
+   cargo build --release
+   ```
 
 ## Usage
 
-1. Start Ollama and pull your preferred model (e.g., exaone35max):
-```bash
-ollama pull exaone35max
+### Prerequisites
+- [Ollama](https://ollama.ai) installed and running locally
+- Qwen 25B model installed:
+  ```bash
+  ollama pull m/qwen2514bmax
+  ```
+
+### Running
+1. Start your Ollama server
+2. Run the application:
+   ```bash
+   ./llm_dataset_builder-macos  # or ./llm_dataset_builder-linux
+   ```
+   Or if built from source:
+   ```bash
+   cargo run
+   ```
+3. Enter data sources when prompted:
+   ```
+   Enter a data source (press Enter to finish):
+   - URL (e.g., https://example.com/file.txt)
+   - Local path (e.g., /path/to/file)
+   - GitHub URL (e.g., https://github.com/user/repo/tree/branch/path)
+   - GitHub releases URL (e.g., https://github.com/user/repo/releases)
+   ```
+
+### Output Format
+Questions are saved in JSONL format:
+```jsonl
+{"question":"What is the main purpose of this application?","answer":"The application automatically generates question-answer pairs from documentation for training LLMs."}
+{"question":"How does it calculate the base number of questions?","answer":"It generates one question for every 10 words of content, rounded up."}
 ```
 
-2. Run the dataset builder:
-```bash
-cargo run
+### Processing Logic
+
+1. **Content Analysis**
+   - Counts total words in content
+   - Calculates base questions (words/10)
+   - Adds 25% extra questions (min 2)
+   - Sets minimum acceptable at 80% of base goal
+
+2. **Question Generation**
+   ```
+   Section (100 words):
+   Base goal: 10 questions
+   Extra questions: max(ceil(10 * 0.25), 2) = 3
+   Generation target: 13 questions
+   Minimum acceptable: 8 questions
+   ```
+
+3. **Recursive Processing**
+   If initial generation falls short:
+   ```
+   1. Try whole section first
+   2. If not enough questions:
+      Split into heading sections
+      Each section target = total_target * (section_words / total_words)
+   3. If still not enough:
+      Split into paragraphs
+      Each paragraph target = total_target * (paragraph_words / total_words)
+   ```
+
+## Example Output
+
+For a documentation file with 1000 words:
+```
+Processing file: docs.md
+Total words: 1000
+Base goal: 100 questions
+Generation target: 125 questions (+25 extra)
+Minimum acceptable: 80 questions
+
+Processing section 1/3 (400 words, target 50 questions)
+Got 45 questions from full section
+Splitting section by headings...
+- Heading 1 (250 words): 31 questions
+- Heading 2 (150 words): 19 questions
+Total: 50 questions
+
+Processing section 2/3 (500 words, target 63 questions)
+Got 63 questions from full section
+
+Processing section 3/3 (100 words, target 12 questions)
+Got 10 questions from full section
+Splitting section by paragraphs...
+- Paragraph 1: 7 questions
+- Paragraph 2: 5 questions
+Total: 12 questions
+
+Final result: 125 questions generated
+Saved to: output/docs_qa.jsonl
 ```
 
-3. Enter your data sources when prompted. Supported formats:
-   - GitHub repository: `https://github.com/user/repo/tree/branch/path`
-   - GitHub releases: `https://github.com/user/repo/releases`
-   - Web URL: `https://example.com/document.txt`
-   - Local file: `/path/to/file.txt`
+## Contributing
 
-4. The tool will:
-   - Download/collect all specified documents
-   - Generate question-answer pairs using Ollama
-   - Save the results to `processed_data.json`
-
-## Output Format
-
-The generated dataset is saved in JSON format with the following structure:
-```json
-[
-  {
-    "question": "What is X?",
-    "answer": "X is..."
-  },
-  {
-    "question": "How does Y work?",
-    "answer": "Y works by..."
-  }
-]
-```
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
