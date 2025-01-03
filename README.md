@@ -1,6 +1,6 @@
 # LLM Dataset Builder
 
-A Rust application that automatically generates high-quality question-answer pairs from documentation, making it perfect for training Large Language Models (LLMs). The application uses Ollama with the Qwen 25B model to process various data sources and creates targeted questions based on content length and complexity.
+A Rust application that automatically generates high-quality question-answer pairs from documentation, making it perfect for training Large Language Models (LLMs). The application uses Ollama with the Qwen v2.5 14B model to process various data sources and creates targeted questions based on content length and complexity.
 
 ## Features
 
@@ -60,7 +60,7 @@ If you want to build from source:
 
 ### Prerequisites
 - [Ollama](https://ollama.ai) installed and running locally
-- Qwen 25B model installed:
+- Qwen v2.5 14B model installed:
   ```bash
   ollama pull m/qwen2514bmax
   ```
