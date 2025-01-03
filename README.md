@@ -151,6 +151,9 @@ Final result: 125 questions generated
 Saved to: output/docs_qa.jsonl
 ```
 
+Example dataset generated here: https://huggingface.co/datasets/technovangelist/OllamaDocs
+
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
