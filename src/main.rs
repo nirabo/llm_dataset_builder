@@ -1,9 +1,7 @@
-use anyhow::Result;
-use clap::Parser;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::io::{self, Write};
+use std::fs;
+use std::io::Write;
 use std::path::Path;
+use clap::Parser;
 use walkdir::WalkDir;
 
 mod datasource;
@@ -24,16 +22,7 @@ struct Args {
     ollama_endpoint: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProcessedItem {
-    #[serde(rename = "question")]
-    pub question: String,
-    #[serde(rename = "answer")]
-    pub answer: String,
-}
-
-async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>> {
+async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>, Box<dyn std::error::Error>> {
     let mut sources: Vec<Box<dyn DataSource>> = Vec::new();
     let mut buffer = String::new();
 
@@ -44,10 +33,10 @@ async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>> {
         println!("- GitHub URL (e.g., https://github.com/user/repo/tree/branch/path)");
         println!("- GitHub releases URL (e.g., https://github.com/user/repo/releases)");
         print!("> ");
-        io::stdout().flush()?;
+        std::io::stdout().flush()?;
         
         buffer.clear();
-        io::stdin().read_line(&mut buffer)?;
+        std::io::stdin().read_line(&mut buffer)?;
         let input = buffer.trim();
         
         if input.is_empty() {
@@ -106,95 +95,92 @@ async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     
     // Create output directory if it doesn't exist
-    std::fs::create_dir_all(&args.output_dir)?;
+    fs::create_dir_all(&args.output_dir)?;
     
-    // Initialize the data collection process
-    println!("Welcome to LLM Dataset Builder!");
-    println!("Please add your data sources. Supported types:");
-    println!("1. URLs");
-    println!("2. Local documents");
-    println!("3. GitHub repositories");
-    println!("4. GitHub releases");
+    // Initialize processor
+    let processor = OllamaProcessor::new(args.ollama_endpoint.clone());
     
+    // Collect data sources
     let sources = collect_sources().await?;
-    let mut collected_files = Vec::new();
+    
+    // Process each source
+    let mut all_items = Vec::new();
 
+    // If no sources added, check existing files
     if sources.is_empty() {
-        // If no sources added, check for existing files in output directory
-        println!("No new sources added. Checking for existing files in output directory...");
-        let output_dir = PathBuf::from(&args.output_dir);
-        for entry in WalkDir::new(&output_dir)
-            .min_depth(1)  // Skip the output directory itself
+        println!("No new sources added. Processing existing files in output directory...");
+        let mut existing_files = Vec::new();
+        for entry in WalkDir::new(Path::new(&args.output_dir))
             .into_iter()
-            .filter_map(|e| e.ok()) {
-                if entry.file_type().is_file() {
-                    let path = entry.path().to_path_buf();
-                    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if extension == "md" || extension == "txt" {
-                        println!("Found existing file: {:?}", entry.path());
-                        collected_files.push(path);
-                    }
-                }
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext == "md" || ext == "txt")
+                    .unwrap_or(false)
+            })
+        {
+            existing_files.push(entry.path().to_path_buf());
         }
-        
-        if collected_files.is_empty() {
-            println!("No files found in output directory. Exiting.");
+
+        if existing_files.is_empty() {
+            println!("No markdown or text files found in output directory to process.");
             return Ok(());
         }
-        println!("Found {} existing files to process.", collected_files.len());
+
+        println!("Found {} markdown/text files to process.", existing_files.len());
+        for file_path in existing_files {
+            println!("Processing file: {:?}", file_path);
+            match processor.process_file(&file_path).await {
+                Ok(items) => {
+                    all_items.extend(items);
+                }
+                Err(e) => {
+                    eprintln!("Error processing file {:?}: {}", file_path, e);
+                }
+            }
+        }
     } else {
-        // Collect data from all sources
-        println!("\nCollecting data from sources...");
+        // Process new sources
         for source in sources {
-            let files = source.collect(args.output_dir.as_ref()).await?;
-            collected_files.extend(files);
+            println!("\nProcessing source...");
+            
+            // Collect files from source
+            let files = source.collect(Path::new(&args.output_dir)).await?;
+            println!("Found {} files", files.len());
+            
+            for file_path in files {
+                println!("Processing file: {:?}", file_path);
+                match processor.process_file(&file_path).await {
+                    Ok(items) => {
+                        all_items.extend(items);
+                    }
+                    Err(e) => {
+                        eprintln!("Error processing file {:?}: {}", file_path, e);
+                    }
+                }
+            }
         }
-        println!("Collected {} files.", collected_files.len());
-    }
-    
-    // Process files with Ollama
-    println!("\nProcessing files with Ollama...");
-    let processor = OllamaProcessor::new(args.ollama_endpoint);
-    
-    let mut all_items = Vec::new();
-    for file in collected_files {
-        println!("\nProcessing file: {:?}", file);
-        let items = processor.process_file(&file).await?;
-        
-        // Generate output filename based on input file
-        let file_stem = file.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
-        let output_file = PathBuf::from(&args.output_dir)
-            .join(format!("{}_qa.json", file_stem));
-        
-        // Save questions for this file
-        std::fs::write(&output_file, serde_json::to_string_pretty(&items)?)?;
-        println!("Saved {} question-answer pairs to {:?}", items.len(), output_file);
-        
-        println!("\nGenerated Questions and Answers:");
-        println!("--------------------------------");
-        for (i, item) in items.iter().enumerate() {
-            println!("\nQ{}: {}", i + 1, item.question);
-            println!("A{}: {}", i + 1, item.answer);
-        }
-        println!("\n{} question-answer pairs generated.", items.len());
-        println!("--------------------------------");
-        
-        all_items.extend(items);
     }
     
     // Save combined results
-    let output_file = PathBuf::from(&args.output_dir).join("all_qa.json");
-    std::fs::write(&output_file, serde_json::to_string_pretty(&all_items)?)?;
-    
-    println!("\nProcessing complete! Generated {} total question-answer pairs.", all_items.len());
-    println!("Combined results saved to: {:?}", output_file);
-    println!("Individual file results saved as [filename]_qa.json in the output directory");
+    let output_file = Path::new(&args.output_dir).join("all_qa.jsonl");
+    let mut output = String::new();
+    for item in &all_items {
+        if let Ok(json_line) = serde_json::to_string(item) {
+            output.push_str(&json_line);
+            output.push('\n');
+        }
+    }
+    fs::write(&output_file, output)?;
+    println!("Saved {} question-answer pairs to {:?}", all_items.len(), output_file);
+    println!("Individual file results saved as [filename]_qa.jsonl in the output directory");
     
     Ok(())
 }
