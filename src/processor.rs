@@ -7,7 +7,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ProcessedItem {
     pub question: String,
     pub answer: String,
@@ -290,22 +290,27 @@ pub trait OllamaProcessor {
 
 pub struct DefaultOllamaProcessor {
     client: Box<dyn OllamaClient>,
+    output_dir: PathBuf,
 }
 
 impl DefaultOllamaProcessor {
     pub fn new(endpoint: String, model: String) -> Self {
         Self {
             client: Box::new(DefaultOllamaClient::new(endpoint, model)),
+            output_dir: PathBuf::from("output"),
         }
     }
 
-    #[cfg(test)]
     pub fn new_with_client(
         _endpoint: String,
         _model: String,
         client: Box<dyn OllamaClient>,
+        output_dir: Option<PathBuf>,
     ) -> Self {
-        Self { client }
+        Self {
+            client,
+            output_dir: output_dir.unwrap_or_else(|| PathBuf::from("output")),
+        }
     }
 
     pub fn count_words(text: &str) -> usize {
@@ -532,9 +537,7 @@ impl DefaultOllamaProcessor {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
-        file_path
-            .parent()
-            .unwrap_or(Path::new("."))
+        self.output_dir
             .join(format!("{}_qa.{}", file_stem, extension))
     }
 
@@ -644,6 +647,11 @@ impl OllamaProcessor for DefaultOllamaProcessor {
         let mut all_items = Vec::new();
         let sections = self.split_into_sections(&content);
 
+        // Create or truncate the output file at the start
+        let qa_path = self.get_qa_path(file_path, "jsonl");
+        println!("Creating output file at {:?}", qa_path);
+        fs::File::create(&qa_path)?;
+
         for (i, section) in sections.iter().enumerate() {
             if section.trim().is_empty() {
                 continue;
@@ -667,26 +675,22 @@ impl OllamaProcessor for DefaultOllamaProcessor {
                 .await
             {
                 Ok(questions) => {
-                    all_items.extend(questions);
-                    println!(
-                        "Total questions so far: {}/{}",
-                        all_items.len(),
-                        total_questions_needed
-                    );
+                    // Write questions from this section immediately
+                    let mut file = fs::OpenOptions::new().append(true).open(&qa_path)?;
+
+                    for item in &questions {
+                        writeln!(file, "{}", serde_json::to_string(item)?)?;
+                    }
+
+                    println!("Added {} questions (written to file)", questions.len());
+
+                    let mut questions_copy = questions.clone();
+                    all_items.append(&mut questions_copy);
                 }
                 Err(e) => {
                     println!("Error processing section: {}", e);
                 }
             }
-        }
-
-        // Always create the output file, even if empty
-        let qa_path = self.get_qa_path(file_path, "jsonl");
-        println!("Saving {} questions to {:?}", all_items.len(), qa_path);
-
-        let mut file = fs::File::create(&qa_path)?;
-        for item in &all_items {
-            writeln!(file, "{}", serde_json::to_string(item)?)?;
         }
 
         Ok(all_items)
@@ -711,11 +715,15 @@ mod tests {
     // Mock OllamaProcessor to override check_existing_qa
     struct TestOllamaProcessor {
         client: Box<dyn OllamaClient>,
+        output_dir: PathBuf,
     }
 
     impl TestOllamaProcessor {
         fn new(client: Box<dyn OllamaClient>) -> Self {
-            Self { client }
+            Self {
+                client,
+                output_dir: PathBuf::from("output"),
+            }
         }
 
         async fn process_section_recursive(
@@ -756,28 +764,33 @@ mod tests {
             let sections = self.split_into_sections(&content);
             let mut all_items = Vec::new();
 
+            // Create output file at start
+            let qa_path = self.get_qa_path(file_path, "jsonl");
+            println!("Creating output file at {:?}", qa_path);
+            fs::File::create(&qa_path)?;
+
             for section in sections {
                 match self
                     .process_section_recursive(&section, total_questions_needed)
                     .await
                 {
                     Ok(questions) => {
-                        all_items.extend(questions);
+                        // Write questions from this section immediately
+                        let mut file = fs::OpenOptions::new().append(true).open(&qa_path)?;
+
+                        for item in &questions {
+                            writeln!(file, "{}", serde_json::to_string(item)?)?;
+                        }
+
+                        let mut questions_copy = questions.clone();
+                        all_items.append(&mut questions_copy);
+                        println!("Added {} questions (written to file)", questions.len());
                     }
                     Err(e) => {
                         println!("Error processing section: {}", e);
                         return Err(e);
                     }
                 }
-            }
-
-            // Always create the output file, even if empty
-            let qa_path = self.get_qa_path(file_path, "jsonl");
-            println!("Saving {} questions to {:?}", all_items.len(), qa_path);
-
-            let mut file = fs::File::create(&qa_path)?;
-            for item in &all_items {
-                writeln!(file, "{}", serde_json::to_string(item)?)?;
             }
 
             Ok(all_items)
