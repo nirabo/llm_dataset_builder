@@ -56,6 +56,79 @@ If you want to build from source:
    cargo build --release
    ```
 
+### Option 3: Development Setup
+For development, we provide a comprehensive Makefile to manage the project:
+
+1. Prerequisites:
+   - Install [uv](https://github.com/astral-sh/uv) for Python package management:
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+
+2. Set up the development environment:
+   ```bash
+   make setup
+   ```
+   This will:
+   - Create a Python virtual environment using uv
+   - Install pre-commit hooks
+   - Install required Rust components
+   - Configure git hooks
+
+2. Common development commands:
+   ```bash
+   make build         # Build debug version
+   make release      # Build release version
+   make test         # Run all tests
+   make lint         # Run formatting and clippy checks
+   make check        # Run all checks (format, lint, test)
+   make run          # Run the application
+   make doc          # Generate documentation
+   ```
+
+3. Additional commands:
+   ```bash
+   make help         # Show all available commands
+   make fmt-fix      # Fix code formatting
+   make test-coverage # Generate test coverage report
+   make dist         # Create release artifacts
+   ```
+
+The pre-commit hooks will run these checks before each commit:
+- Trailing whitespace removal
+- End of file fixing
+- YAML validation
+- Large file checks
+- Rust formatting
+- Cargo check
+- Clippy lints
+
+## Configuration
+
+The application can be configured using environment variables or command line arguments. Command line arguments take precedence over environment variables.
+
+### Environment Variables
+Copy the `.env.example` file to `.env` and customize the values:
+```bash
+cp .env.example .env
+```
+
+Available environment variables:
+- `OLLAMA_ENDPOINT`: Ollama API endpoint (default: "http://localhost:11434")
+- `OLLAMA_MODEL`: Ollama model to use (default: "m/qwen2514bmax")
+- `OUTPUT_DIR`: Output directory for collected data (default: "output")
+
+### Command Line Arguments
+Command line arguments override environment variables:
+```bash
+cargo run -- -e http://localhost:11434 -m m/qwen2514bmax -d output
+```
+
+Options:
+- `-e, --ollama-endpoint`: Ollama API endpoint
+- `-m, --model`: Ollama model to use
+- `-d, --output-dir`: Output directory for collected data
+
 ## Usage
 
 ### Prerequisites
@@ -156,7 +229,11 @@ Example dataset generated here: https://huggingface.co/datasets/technovangelist/
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. All PRs are automatically tested with:
+- Unit tests
+- Integration tests
+- Clippy lints
+- Code formatting checks
 
 ## License
 

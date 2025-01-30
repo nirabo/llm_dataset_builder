@@ -23,37 +23,37 @@ jobs:
         run: |
           # Get the last two commits to find the latest changes
           COMMITS=$(git log -2 --pretty=format:"%s")
-          
+
           # Create release notes content
           cat << EOF > release_notes.md
           # Release v${{ steps.version.outputs.version }}
-          
+
           ## What's Changed
-          
+
           $(git log -1 --pretty=format:"%b")
-          
+
           ## Recent Changes
           $(git log -10 --pretty=format:"* %s")
-          
+
           ## Build Information
           * This release includes builds for:
             * Linux (x86_64)
             * macOS (ARM64)
-          
+
           ## Installation
           Download the appropriate binary for your system and extract it:
-          
+
           ### Linux
           ```bash
           tar xzf llm_dataset_builder-linux-x86_64.tar.gz
           ```
-          
+
           ### macOS (Apple Silicon)
           ```bash
           tar xzf llm_dataset_builder-darwin-arm64.tar.gz
           ```
           EOF
-          
+
           # Store release notes for the release step
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
           cat release_notes.md >> $GITHUB_ENV
@@ -114,7 +114,7 @@ jobs:
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-          
+
       - name: Compress binary
         if: matrix.os != 'windows-2022'
         run: |
