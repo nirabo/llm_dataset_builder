@@ -56,6 +56,54 @@ If you want to build from source:
    cargo build --release
    ```
 
+### Option 3: Development Setup
+For development, you'll want to set up pre-commit hooks to ensure code quality:
+
+1. Install pre-commit:
+   ```bash
+   pip install pre-commit
+   ```
+
+2. Install the git hooks:
+   ```bash
+   pre-commit install
+   ```
+
+This will set up the following checks to run before each commit:
+- Trailing whitespace removal
+- End of file fixing
+- YAML validation
+- Large file checks
+- Rust formatting
+- Cargo check
+- Clippy lints
+
+## Configuration
+
+The application can be configured using environment variables or command line arguments. Command line arguments take precedence over environment variables.
+
+### Environment Variables
+Copy the `.env.example` file to `.env` and customize the values:
+```bash
+cp .env.example .env
+```
+
+Available environment variables:
+- `OLLAMA_ENDPOINT`: Ollama API endpoint (default: "http://localhost:11434")
+- `OLLAMA_MODEL`: Ollama model to use (default: "m/qwen2514bmax")
+- `OUTPUT_DIR`: Output directory for collected data (default: "output")
+
+### Command Line Arguments
+Command line arguments override environment variables:
+```bash
+cargo run -- -e http://localhost:11434 -m m/qwen2514bmax -d output
+```
+
+Options:
+- `-e, --ollama-endpoint`: Ollama API endpoint
+- `-m, --model`: Ollama model to use
+- `-d, --output-dir`: Output directory for collected data
+
 ## Usage
 
 ### Prerequisites
@@ -156,7 +204,11 @@ Example dataset generated here: https://huggingface.co/datasets/technovangelist/
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. All PRs are automatically tested with:
+- Unit tests
+- Integration tests
+- Clippy lints
+- Code formatting checks
 
 ## License
 
