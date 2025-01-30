@@ -6,11 +6,20 @@ use uuid::Uuid;
 pub enum NodeType {
     Document,
     Section,
+    Text,
+    Code,
+    List,
+    ListItem,
+    Table,
+    TableRow,
+    TableCell,
+    Link,
+    Image,
+    Quote,
+    Footnote,
     Subsection,
     Paragraph,
-    List,
     CodeBlock,
-    Table,
 }
 
 /// Metadata associated with a document node

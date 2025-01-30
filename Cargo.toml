@@ -24,7 +24,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 qdrant-client = "1.7"
 ollama-rs = "0.1"
 # Markdown parsing
-pulldown-cmark = "0.9"
+pulldown-cmark = { version = "0.9", default-features = false }
 # Utilities
 thiserror = "1.0"
 tracing = "0.1"
