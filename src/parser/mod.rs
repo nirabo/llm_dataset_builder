@@ -2,11 +2,7 @@ use anyhow::Result;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
 use std::path::Path;
 
-use crate::graph::{
-    node::NodeType,
-    DocumentGraph,
-    DocumentNode,
-};
+use crate::graph::{node::NodeType, DocumentGraph, DocumentNode};
 
 /// Parse a markdown file into a document graph
 pub fn parse_markdown_file(path: &Path) -> Result<DocumentGraph> {
@@ -100,14 +96,8 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
             }
             Event::Start(Tag::List(_)) => {
                 // Create a new list node
-                let list_node = DocumentNode::new(
-                    NodeType::List,
-                    String::new(),
-                    None,
-                    None,
-                    0,
-                    vec![],
-                );
+                let list_node =
+                    DocumentNode::new(NodeType::List, String::new(), None, None, 0, vec![]);
                 list_stack.push(list_node);
             }
             Event::End(Tag::List(_)) => {
@@ -132,14 +122,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
 
     // Handle any remaining text
     if !current_text.is_empty() {
-        let text_node = DocumentNode::new(
-            NodeType::Text,
-            current_text,
-            None,
-            None,
-            0,
-            vec![],
-        );
+        let text_node = DocumentNode::new(NodeType::Text, current_text, None, None, 0, vec![]);
         graph.add_node(text_node);
     }
 
@@ -170,7 +153,7 @@ fn main() {
 "#;
 
         let graph = parse_markdown(markdown).unwrap();
-        
+
         // Check if we have the correct number of nodes
         let sections = graph.get_nodes_by_type(NodeType::Section);
         let code_blocks = graph.get_nodes_by_type(NodeType::Code);
