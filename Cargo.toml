@@ -17,6 +17,18 @@ async-trait = "0.1"
 regex = "1.10"
 walkdir = "2.4"
 dotenv = "0.15"
+# Graph processing
+petgraph = "0.6"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+# External services
+qdrant-client = "1.7"
+ollama-rs = "0.1"
+# Markdown parsing
+pulldown-cmark = "0.9"
+# Utilities
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [dev-dependencies]
 mockall = "0.11"
