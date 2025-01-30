@@ -4,4 +4,7 @@
 Cargo.lock
 .DS_Store
 /output/
+/dist/
+/.venv/
 processed_data.json
+tarpaulin-report.html

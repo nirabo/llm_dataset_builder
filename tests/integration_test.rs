@@ -1,12 +1,12 @@
-use std::fs;
-use std::env;
 use assert_fs::prelude::*;
 use predicates::prelude::*;
+use std::env;
+use std::fs;
 
 #[tokio::test]
 async fn test_cli_args_override_env_vars() {
     let temp = assert_fs::TempDir::new().unwrap();
-    
+
     // Copy test data
     fs::copy("tests/data/test.md", temp.path().join("test.md")).unwrap();
 
@@ -43,7 +43,7 @@ async fn test_cli_args_override_env_vars() {
 #[tokio::test]
 async fn test_env_vars_used_when_no_cli_args() {
     let temp = assert_fs::TempDir::new().unwrap();
-    
+
     // Copy test data
     fs::copy("tests/data/test.md", temp.path().join("test.md")).unwrap();
 
@@ -74,7 +74,7 @@ async fn test_env_vars_used_when_no_cli_args() {
 #[tokio::test]
 async fn test_defaults_used_when_no_config() {
     let temp = assert_fs::TempDir::new().unwrap();
-    
+
     // Copy test data
     fs::copy("tests/data/test.md", temp.path().join("test.md")).unwrap();
 

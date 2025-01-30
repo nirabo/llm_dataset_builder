@@ -57,19 +57,44 @@ If you want to build from source:
    ```
 
 ### Option 3: Development Setup
-For development, you'll want to set up pre-commit hooks to ensure code quality:
+For development, we provide a comprehensive Makefile to manage the project:
 
-1. Install pre-commit:
+1. Prerequisites:
+   - Install [uv](https://github.com/astral-sh/uv) for Python package management:
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+
+2. Set up the development environment:
    ```bash
-   pip install pre-commit
+   make setup
+   ```
+   This will:
+   - Create a Python virtual environment using uv
+   - Install pre-commit hooks
+   - Install required Rust components
+   - Configure git hooks
+
+2. Common development commands:
+   ```bash
+   make build         # Build debug version
+   make release      # Build release version
+   make test         # Run all tests
+   make lint         # Run formatting and clippy checks
+   make check        # Run all checks (format, lint, test)
+   make run          # Run the application
+   make doc          # Generate documentation
    ```
 
-2. Install the git hooks:
+3. Additional commands:
    ```bash
-   pre-commit install
+   make help         # Show all available commands
+   make fmt-fix      # Fix code formatting
+   make test-coverage # Generate test coverage report
+   make dist         # Create release artifacts
    ```
 
-This will set up the following checks to run before each commit:
+The pre-commit hooks will run these checks before each commit:
 - Trailing whitespace removal
 - End of file fixing
 - YAML validation

@@ -1,11 +1,11 @@
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use regex::Regex;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use anyhow::{Result, anyhow};
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use regex::Regex;
-use async_trait::async_trait;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProcessedItem {
@@ -15,7 +15,11 @@ pub struct ProcessedItem {
 
 #[async_trait]
 pub trait OllamaClient: Send + Sync {
-    async fn generate_questions(&self, content: &str, target_count: usize) -> Result<Vec<ProcessedItem>>;
+    async fn generate_questions(
+        &self,
+        content: &str,
+        target_count: usize,
+    ) -> Result<Vec<ProcessedItem>>;
 }
 
 pub struct DefaultOllamaClient {
@@ -72,7 +76,7 @@ impl DefaultOllamaClient {
         // Remove any trailing commas in arrays
         let re = Regex::new(r",(\s*[\]}])").unwrap();
         let json = re.replace_all(&truncated_fix, "$1").to_string();
-        
+
         // Remove newlines and extra whitespace between JSON elements
         let re = Regex::new(r"\s*\n\s*").unwrap();
         let json = re.replace_all(&json, " ").to_string();
@@ -80,7 +84,7 @@ impl DefaultOllamaClient {
         // Fix Windows paths while preserving escaped quotes
         let mut result = String::with_capacity(json.len());
         let mut chars = json.chars().peekable();
-        
+
         while let Some(c) = chars.next() {
             if c == '\\' {
                 if let Some(&next) = chars.peek() {
@@ -100,19 +104,25 @@ impl DefaultOllamaClient {
                 result.push(c);
             }
         }
-        
+
         result
     }
 }
 
 #[async_trait]
 impl OllamaClient for DefaultOllamaClient {
-    async fn generate_questions(&self, content: &str, target_count: usize) -> Result<Vec<ProcessedItem>> {
+    async fn generate_questions(
+        &self,
+        content: &str,
+        target_count: usize,
+    ) -> Result<Vec<ProcessedItem>> {
         const MAX_RETRIES: usize = 3;
         let mut retries = 0;
 
         while retries < MAX_RETRIES {
-            let prompt_text = if content.contains("# Release Notes") || content.contains("# Changelog") {
+            let prompt_text = if content.contains("# Release Notes")
+                || content.contains("# Changelog")
+            {
                 format!(
                     "Generate exactly {} unique questions and answers from these release notes. \
                      Focus on specific changes, features, and improvements. \
@@ -129,7 +139,9 @@ impl OllamaClient for DefaultOllamaClient {
                 )
             };
 
-            let (system_msg, user_msg) = if content.contains("# Release Notes") || content.contains("# Changelog") {
+            let (system_msg, user_msg) = if content.contains("# Release Notes")
+                || content.contains("# Changelog")
+            {
                 (
                     "You are a helpful assistant that generates questions and answers about software release notes. \
                      Format your response as JSON. Keep answers concise and factual. \
@@ -146,8 +158,9 @@ impl OllamaClient for DefaultOllamaClient {
             };
 
             println!("Requesting {} questions from Ollama...", target_count);
-            let response = self.client
-                .post(&format!("{}/api/chat", self.endpoint))
+            let response = self
+                .client
+                .post(format!("{}/api/chat", self.endpoint))
                 .json(&serde_json::json!({
                     "model": &self.model,
                     "messages": [
@@ -160,9 +173,9 @@ impl OllamaClient for DefaultOllamaClient {
                             "content": user_msg
                         }
                     ],
-                    "stream": false, 
+                    "stream": false,
                     "format": {
-                        "type": "object", 
+                        "type": "object",
                         "required": ["questions"],
                         "properties": {
                             "questions": {
@@ -194,12 +207,12 @@ impl OllamaClient for DefaultOllamaClient {
 
             let response_text = response.text().await?;
             println!("Received response from Ollama");
-            
+
             #[derive(Debug, Deserialize)]
             struct ChatMessage {
                 content: String,
             }
-            
+
             #[derive(Debug, Deserialize)]
             struct ChatResponse {
                 message: ChatMessage,
@@ -216,34 +229,57 @@ impl OllamaClient for DefaultOllamaClient {
 
                     match serde_json::from_str::<QuestionResponse>(&sanitized) {
                         Ok(parsed) => {
-                            println!("Received {} questions (requested {})", parsed.questions.len(), target_count);
+                            println!(
+                                "Received {} questions (requested {})",
+                                parsed.questions.len(),
+                                target_count
+                            );
                             return Ok(parsed.questions);
                         }
                         Err(e) => {
-                            println!("Failed to parse as JSON (attempt {}/{}): {}", retries + 1, MAX_RETRIES, e);
+                            println!(
+                                "Failed to parse as JSON (attempt {}/{}): {}",
+                                retries + 1,
+                                MAX_RETRIES,
+                                e
+                            );
                             println!("Raw response: {}", response_text);
                             println!("Sanitized response: {}", sanitized);
                             retries += 1;
                             if retries == MAX_RETRIES {
-                                return Err(anyhow!("Failed to parse Ollama response after {} attempts", MAX_RETRIES));
+                                return Err(anyhow!(
+                                    "Failed to parse Ollama response after {} attempts",
+                                    MAX_RETRIES
+                                ));
                             }
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
                     }
                 }
                 Err(e) => {
-                    println!("Failed to parse chat response (attempt {}/{}): {}", retries + 1, MAX_RETRIES, e);
+                    println!(
+                        "Failed to parse chat response (attempt {}/{}): {}",
+                        retries + 1,
+                        MAX_RETRIES,
+                        e
+                    );
                     println!("Raw response: {}", response_text);
                     retries += 1;
                     if retries == MAX_RETRIES {
-                        return Err(anyhow!("Failed to parse chat response after {} attempts", MAX_RETRIES));
+                        return Err(anyhow!(
+                            "Failed to parse chat response after {} attempts",
+                            MAX_RETRIES
+                        ));
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }
         }
 
-        Err(anyhow!("Failed to process section after {} attempts", MAX_RETRIES))
+        Err(anyhow!(
+            "Failed to process section after {} attempts",
+            MAX_RETRIES
+        ))
     }
 }
 
@@ -264,7 +300,11 @@ impl DefaultOllamaProcessor {
     }
 
     #[cfg(test)]
-    pub fn new_with_client(_endpoint: String, _model: String, client: Box<dyn OllamaClient>) -> Self {
+    pub fn new_with_client(
+        _endpoint: String,
+        _model: String,
+        client: Box<dyn OllamaClient>,
+    ) -> Self {
         Self { client }
     }
 
@@ -279,12 +319,15 @@ impl DefaultOllamaProcessor {
         let extra_questions = extra_questions.max(2);
         let generation_target = base_goal + extra_questions;
         let min_acceptable = ((base_goal as f64 * 0.8).ceil() as usize).max(2);
-        
+
         println!("Question targets for {} words:", word_count);
         println!("  Base goal: {} questions", base_goal);
-        println!("  Generating: {} questions (+{} extra)", generation_target, extra_questions);
+        println!(
+            "  Generating: {} questions (+{} extra)",
+            generation_target, extra_questions
+        );
         println!("  Minimum acceptable: {} questions", min_acceptable);
-        
+
         (base_goal, generation_target, min_acceptable)
     }
 
@@ -292,7 +335,7 @@ impl DefaultOllamaProcessor {
         let mut sections = Vec::new();
         let mut current_section = String::new();
         let header_regex = Regex::new(r"(?m)^#\s|^##\s").unwrap();
-        
+
         if !header_regex.is_match(content.lines().next().unwrap_or("")) {
             current_section = String::new();
         }
@@ -307,7 +350,7 @@ impl DefaultOllamaProcessor {
             current_section.push_str(line);
             current_section.push('\n');
         }
-        
+
         if !current_section.trim().is_empty() {
             sections.push(current_section);
         }
@@ -322,34 +365,32 @@ impl DefaultOllamaProcessor {
     fn split_by_headings(&self, content: &str) -> Vec<String> {
         let mut sections = Vec::new();
         let mut current_section = String::new();
-        
+
         for line in content.lines() {
-            if line.starts_with('#') {
-                if !current_section.trim().is_empty() {
-                    sections.push(current_section);
-                    current_section = String::new();
-                }
+            if line.starts_with('#') && !current_section.trim().is_empty() {
+                sections.push(current_section);
+                current_section = String::new();
             }
             current_section.push_str(line);
             current_section.push('\n');
         }
-        
+
         if !current_section.trim().is_empty() {
             sections.push(current_section);
         }
-        
+
         if sections.is_empty() {
             sections.push(content.to_string());
         }
-        
+
         sections
     }
-    
+
     fn split_by_paragraphs(&self, content: &str) -> Vec<String> {
         let mut sections = Vec::new();
         let mut current_section = String::new();
         let mut empty_lines = 0;
-        
+
         for line in content.lines() {
             if line.trim().is_empty() {
                 empty_lines += 1;
@@ -364,78 +405,125 @@ impl DefaultOllamaProcessor {
             current_section.push_str(line);
             current_section.push('\n');
         }
-        
+
         if !current_section.trim().is_empty() {
             sections.push(current_section);
         }
-        
+
         if sections.is_empty() {
             sections.push(content.to_string());
         }
-        
+
         sections
     }
 
-    async fn process_section_recursive(&self, section: &str, target_questions: usize) -> Result<Vec<ProcessedItem>> {
+    async fn process_section_recursive(
+        &self,
+        section: &str,
+        target_questions: usize,
+    ) -> Result<Vec<ProcessedItem>> {
         let mut all_items = Vec::new();
-        
-        let items = self.client.generate_questions(section, target_questions).await?;
-        println!("Got {} questions from full section (target: {})", items.len(), target_questions);
-        
+
+        let items = self
+            .client
+            .generate_questions(section, target_questions)
+            .await?;
+        println!(
+            "Got {} questions from full section (target: {})",
+            items.len(),
+            target_questions
+        );
+
         if items.len() >= target_questions {
             return Ok(items);
         }
-        
+
         println!("Splitting section by headings...");
         let heading_sections = self.split_by_headings(section);
         if heading_sections.len() > 1 {
             for (i, subsection) in heading_sections.iter().enumerate() {
-                println!("Processing heading section {}/{}", i + 1, heading_sections.len());
-                let words_ratio = Self::count_words(subsection) as f64 / Self::count_words(section) as f64;
+                println!(
+                    "Processing heading section {}/{}",
+                    i + 1,
+                    heading_sections.len()
+                );
+                let words_ratio =
+                    Self::count_words(subsection) as f64 / Self::count_words(section) as f64;
                 let subsection_target = (target_questions as f64 * words_ratio).ceil() as usize;
-                println!("  Target {} questions ({:.1}% of content)", subsection_target, words_ratio * 100.0);
-                
-                match self.client.generate_questions(subsection, subsection_target).await {
+                println!(
+                    "  Target {} questions ({:.1}% of content)",
+                    subsection_target,
+                    words_ratio * 100.0
+                );
+
+                match self
+                    .client
+                    .generate_questions(subsection, subsection_target)
+                    .await
+                {
                     Ok(mut items) => {
                         println!("  Got {} questions", items.len());
                         all_items.append(&mut items);
-                    },
+                    }
                     Err(e) => println!("Error processing heading section: {}", e),
                 }
             }
-            
+
             if all_items.len() >= target_questions {
-                println!("Got enough questions from heading sections: {}", all_items.len());
+                println!(
+                    "Got enough questions from heading sections: {}",
+                    all_items.len()
+                );
                 return Ok(all_items);
             }
         }
-        
+
         println!("Splitting section by paragraphs...");
         all_items.clear();
         let paragraph_sections = self.split_by_paragraphs(section);
         if paragraph_sections.len() > 1 {
             for (i, subsection) in paragraph_sections.iter().enumerate() {
-                println!("Processing paragraph section {}/{}", i + 1, paragraph_sections.len());
-                let words_ratio = Self::count_words(subsection) as f64 / Self::count_words(section) as f64;
+                println!(
+                    "Processing paragraph section {}/{}",
+                    i + 1,
+                    paragraph_sections.len()
+                );
+                let words_ratio =
+                    Self::count_words(subsection) as f64 / Self::count_words(section) as f64;
                 let subsection_target = (target_questions as f64 * words_ratio).ceil() as usize;
-                println!("  Target {} questions ({:.1}% of content)", subsection_target, words_ratio * 100.0);
-                
-                match self.client.generate_questions(subsection, subsection_target).await {
+                println!(
+                    "  Target {} questions ({:.1}% of content)",
+                    subsection_target,
+                    words_ratio * 100.0
+                );
+
+                match self
+                    .client
+                    .generate_questions(subsection, subsection_target)
+                    .await
+                {
                     Ok(mut items) => {
                         println!("  Got {} questions", items.len());
                         all_items.append(&mut items);
-                    },
+                    }
                     Err(e) => println!("Error processing paragraph section: {}", e),
                 }
             }
-            
+
             if all_items.len() >= target_questions {
-                println!("Got enough questions from paragraph sections: {}", all_items.len());
+                println!(
+                    "Got enough questions from paragraph sections: {}",
+                    all_items.len()
+                );
                 return Ok(all_items);
             }
         }
-        
-        println!("Could not generate enough questions. Got {} out of {}", all_items.len(), target_questions);
+
+        println!(
+            "Could not generate enough questions. Got {} out of {}",
+            all_items.len(),
+            target_questions
+        );
         Ok(all_items)
     }
 
@@ -450,11 +538,18 @@ impl DefaultOllamaProcessor {
             .join(format!("{}_qa.{}", file_stem, extension))
     }
 
-    fn convert_json_to_jsonl(&self, json_path: &Path, jsonl_path: &Path) -> Result<Vec<ProcessedItem>> {
-        println!("Converting {:?} to JSONL format at {:?}", json_path, jsonl_path);
+    fn convert_json_to_jsonl(
+        &self,
+        json_path: &Path,
+        jsonl_path: &Path,
+    ) -> Result<Vec<ProcessedItem>> {
+        println!(
+            "Converting {:?} to JSONL format at {:?}",
+            json_path, jsonl_path
+        );
         let content = fs::read_to_string(json_path)?;
         let items: Vec<ProcessedItem> = serde_json::from_str(&content)?;
-        
+
         let mut output = String::new();
         for item in &items {
             if let Ok(json_line) = serde_json::to_string(item) {
@@ -466,9 +561,13 @@ impl DefaultOllamaProcessor {
         Ok(items)
     }
 
-    fn check_existing_qa(&self, file_path: &Path, _required_questions: usize) -> Result<Option<Vec<ProcessedItem>>> {
+    fn check_existing_qa(
+        &self,
+        file_path: &Path,
+        _required_questions: usize,
+    ) -> Result<Option<Vec<ProcessedItem>>> {
         let jsonl_path = self.get_qa_path(file_path, "jsonl");
-        
+
         if jsonl_path.exists() {
             println!("Found existing JSONL file: {:?}", jsonl_path);
             if let Ok(content) = fs::read_to_string(&jsonl_path) {
@@ -482,13 +581,13 @@ impl DefaultOllamaProcessor {
                     let content = fs::read_to_string(file_path)?;
                     let word_count = Self::count_words(&content);
                     let (_, _, min_acceptable) = Self::calculate_question_targets(word_count);
-                    
+
                     if items.len() >= min_acceptable {
-                        println!("Found existing JSONL file with {} questions (minimum acceptable: {}), skipping...", 
+                        println!("Found existing JSONL file with {} questions (minimum acceptable: {}), skipping...",
                             items.len(), min_acceptable);
                         return Ok(Some(items));
                     } else {
-                        println!("Found existing JSONL file but only has {} questions (minimum needed: {}), regenerating with extra buffer...", 
+                        println!("Found existing JSONL file but only has {} questions (minimum needed: {}), regenerating with extra buffer...",
                             items.len(), min_acceptable);
                     }
                 } else {
@@ -504,9 +603,9 @@ impl DefaultOllamaProcessor {
                         let content = fs::read_to_string(file_path)?;
                         let word_count = Self::count_words(&content);
                         let (_, _, min_acceptable) = Self::calculate_question_targets(word_count);
-                        
+
                         if items.len() >= min_acceptable {
-                            println!("Found existing JSON file with {} questions (minimum acceptable: {}), converting to JSONL...", 
+                            println!("Found existing JSON file with {} questions (minimum acceptable: {}), converting to JSONL...",
                                 items.len(), min_acceptable);
                             match self.convert_json_to_jsonl(&json_path, &jsonl_path) {
                                 Ok(items) => {
@@ -518,7 +617,7 @@ impl DefaultOllamaProcessor {
                                 }
                             }
                         } else {
-                            println!("Found existing JSON file but only has {} questions (minimum needed: {}), regenerating with extra buffer...", 
+                            println!("Found existing JSON file but only has {} questions (minimum needed: {}), regenerating with extra buffer...",
                                 items.len(), min_acceptable);
                         }
                     }
@@ -544,23 +643,36 @@ impl OllamaProcessor for DefaultOllamaProcessor {
 
         let mut all_items = Vec::new();
         let sections = self.split_into_sections(&content);
-        
+
         for (i, section) in sections.iter().enumerate() {
             if section.trim().is_empty() {
                 continue;
             }
-            
+
             let section_words = Self::count_words(section);
-            let section_target = (total_questions_needed as f64 * 
-                (section_words as f64 / total_words as f64)).ceil() as usize;
-            
-            println!("\nProcessing section {}/{} ({} words, target {} questions)", 
-                i + 1, sections.len(), section_words, section_target);
-            
-            match self.process_section_recursive(section, section_target).await {
+            let section_target = (total_questions_needed as f64
+                * (section_words as f64 / total_words as f64))
+                .ceil() as usize;
+
+            println!(
+                "\nProcessing section {}/{} ({} words, target {} questions)",
+                i + 1,
+                sections.len(),
+                section_words,
+                section_target
+            );
+
+            match self
+                .process_section_recursive(section, section_target)
+                .await
+            {
                 Ok(questions) => {
                     all_items.extend(questions);
-                    println!("Total questions so far: {}/{}", all_items.len(), total_questions_needed);
+                    println!(
+                        "Total questions so far: {}/{}",
+                        all_items.len(),
+                        total_questions_needed
+                    );
                 }
                 Err(e) => {
                     println!("Error processing section: {}", e);
@@ -571,7 +683,7 @@ impl OllamaProcessor for DefaultOllamaProcessor {
         // Always create the output file, even if empty
         let qa_path = self.get_qa_path(file_path, "jsonl");
         println!("Saving {} questions to {:?}", all_items.len(), qa_path);
-        
+
         let mut file = fs::File::create(&qa_path)?;
         for item in &all_items {
             writeln!(file, "{}", serde_json::to_string(item)?)?;
@@ -606,8 +718,14 @@ mod tests {
             Self { client }
         }
 
-        async fn process_section_recursive(&self, section: &str, target_questions: usize) -> Result<Vec<ProcessedItem>> {
-            self.client.generate_questions(section, target_questions).await
+        async fn process_section_recursive(
+            &self,
+            section: &str,
+            target_questions: usize,
+        ) -> Result<Vec<ProcessedItem>> {
+            self.client
+                .generate_questions(section, target_questions)
+                .await
         }
 
         fn split_into_sections(&self, content: &str) -> Vec<String> {
@@ -631,14 +749,18 @@ mod tests {
         async fn process_file(&self, file_path: &Path) -> Result<Vec<ProcessedItem>> {
             let content = fs::read_to_string(file_path)?;
             let total_words = DefaultOllamaProcessor::count_words(&content);
-            let (_, total_questions_needed, _) = DefaultOllamaProcessor::calculate_question_targets(total_words);
+            let (_, total_questions_needed, _) =
+                DefaultOllamaProcessor::calculate_question_targets(total_words);
 
             // Skip checking existing QA files in tests
             let sections = self.split_into_sections(&content);
             let mut all_items = Vec::new();
 
             for section in sections {
-                match self.process_section_recursive(&section, total_questions_needed).await {
+                match self
+                    .process_section_recursive(&section, total_questions_needed)
+                    .await
+                {
                     Ok(questions) => {
                         all_items.extend(questions);
                     }
@@ -652,7 +774,7 @@ mod tests {
             // Always create the output file, even if empty
             let qa_path = self.get_qa_path(file_path, "jsonl");
             println!("Saving {} questions to {:?}", all_items.len(), qa_path);
-            
+
             let mut file = fs::File::create(&qa_path)?;
             for item in &all_items {
                 writeln!(file, "{}", serde_json::to_string(item)?)?;
@@ -667,25 +789,30 @@ mod tests {
         let mut mock_client = MockOllamaClient::new();
         mock_client
             .expect_generate_questions()
-            .with(predicate::function(|content: &str| content.trim() == "test content"), predicate::eq(4))
+            .with(
+                predicate::function(|content: &str| content.trim() == "test content"),
+                predicate::eq(4),
+            )
             .times(1)
-            .returning(|_, _| Ok(vec![
-                ProcessedItem {
-                    question: "Q1".to_string(),
-                    answer: "A1".to_string(),
-                },
-                ProcessedItem {
-                    question: "Q2".to_string(),
-                    answer: "A2".to_string(),
-                },
-            ]));
+            .returning(|_, _| {
+                Ok(vec![
+                    ProcessedItem {
+                        question: "Q1".to_string(),
+                        answer: "A1".to_string(),
+                    },
+                    ProcessedItem {
+                        question: "Q2".to_string(),
+                        answer: "A2".to_string(),
+                    },
+                ])
+            });
 
         let processor = TestOllamaProcessor::new(Box::new(mock_client));
 
         let temp_dir = tempfile::tempdir().unwrap();
         let test_file = temp_dir.path().join("test.md");
         fs::write(&test_file, "test content").unwrap();
-        
+
         let result = processor.process_file(&test_file).await;
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -699,7 +826,10 @@ mod tests {
         let mut mock_client = MockOllamaClient::new();
         mock_client
             .expect_generate_questions()
-            .with(predicate::function(|content: &str| content.trim().is_empty()), predicate::eq(4))
+            .with(
+                predicate::function(|content: &str| content.trim().is_empty()),
+                predicate::eq(4),
+            )
             .times(1)
             .returning(|_, _| Ok(vec![]));
 
@@ -708,7 +838,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let test_file = temp_dir.path().join("empty.md");
         fs::write(&test_file, "").unwrap();
-        
+
         let result = processor.process_file(&test_file).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -719,7 +849,10 @@ mod tests {
         let mut mock_client = MockOllamaClient::new();
         mock_client
             .expect_generate_questions()
-            .with(predicate::function(|content: &str| content.trim() == "test content"), predicate::eq(4))
+            .with(
+                predicate::function(|content: &str| content.trim() == "test content"),
+                predicate::eq(4),
+            )
             .times(1)
             .returning(|_, _| Err(anyhow!("API Error")));
 
@@ -728,7 +861,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let test_file = temp_dir.path().join("test.md");
         fs::write(&test_file, "test content").unwrap();
-        
+
         let result = processor.process_file(&test_file).await;
         assert!(result.is_err());
     }

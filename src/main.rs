@@ -1,13 +1,15 @@
+use clap::Parser;
+use dotenv::dotenv;
+use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use clap::Parser;
 use walkdir::WalkDir;
-use dotenv::dotenv;
-use std::env;
 
-use llm_dataset_builder::datasource::{DataSource, UrlSource, LocalSource, GitHubSource, GitHubReleaseSource};
-use llm_dataset_builder::processor::{OllamaProcessor, DefaultOllamaProcessor};
+use llm_dataset_builder::datasource::{
+    DataSource, GitHubReleaseSource, GitHubSource, LocalSource, UrlSource,
+};
+use llm_dataset_builder::processor::{DefaultOllamaProcessor, OllamaProcessor};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -41,11 +43,11 @@ async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>, Box<dyn std::erro
         println!("- GitHub releases URL (e.g., https://github.com/user/repo/releases)");
         print!("> ");
         std::io::stdout().flush()?;
-        
+
         buffer.clear();
         std::io::stdin().read_line(&mut buffer)?;
         let input = buffer.trim();
-        
+
         if input.is_empty() {
             break;
         }
@@ -64,13 +66,15 @@ async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>, Box<dyn std::erro
         }
 
         // Check if it's a GitHub URL
-        if input.starts_with("https://github.com/") && (input.contains("/tree/") || input.contains("/blob/")) {
+        if input.starts_with("https://github.com/")
+            && (input.contains("/tree/") || input.contains("/blob/"))
+        {
             println!("Processing GitHub source: {}", input);
             sources.push(Box::new(GitHubSource::new(input, None, None)) as Box<dyn DataSource>);
             println!("Successfully added GitHub source: {}", input);
             continue;
         }
-        
+
         // Check if it's a regular URL
         if input.starts_with("http://") || input.starts_with("https://") {
             println!("Processing URL source: {}", input);
@@ -97,7 +101,7 @@ async fn collect_sources() -> Result<Vec<Box<dyn DataSource>>, Box<dyn std::erro
             println!("- A valid local file or directory path");
         }
     }
-    
+
     Ok(sources)
 }
 
@@ -107,33 +111,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
     let args = Args::parse();
-    
+
     // Use command line args if provided, otherwise fall back to env vars, then defaults
-    let output_dir = args.output_dir
+    let output_dir = args
+        .output_dir
         .or_else(|| env::var("OUTPUT_DIR").ok())
         .unwrap_or_else(|| "output".to_string());
-        
-    let ollama_endpoint = args.ollama_endpoint
+
+    let ollama_endpoint = args
+        .ollama_endpoint
         .or_else(|| env::var("OLLAMA_ENDPOINT").ok())
         .unwrap_or_else(|| "http://localhost:11434".to_string());
-        
-    let model = args.model
+
+    let model = args
+        .model
         .or_else(|| env::var("OLLAMA_MODEL").ok())
         .unwrap_or_else(|| "m/qwen2514bmax".to_string());
-    
+
     // Create output directory if it doesn't exist
     fs::create_dir_all(&output_dir)?;
-    
+
     // Initialize processor
     let processor = DefaultOllamaProcessor::new(ollama_endpoint.clone(), model.clone());
-    
+
     // Collect data sources
     let sources = if args.test_mode {
         Vec::new()
     } else {
         collect_sources().await?
     };
-    
+
     // Process each source
     let mut all_items = Vec::new();
 
@@ -161,7 +168,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
 
-        println!("Found {} markdown/text files to process.", existing_files.len());
+        println!(
+            "Found {} markdown/text files to process.",
+            existing_files.len()
+        );
         for file_path in existing_files {
             println!("Processing file: {:?}", file_path);
             match processor.process_file(&file_path).await {
@@ -177,11 +187,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Process new sources
         for source in sources {
             println!("\nProcessing source...");
-            
+
             // Collect files from source
             let files = source.collect(Path::new(&output_dir)).await?;
             println!("Found {} files", files.len());
-            
+
             for file_path in files {
                 println!("Processing file: {:?}", file_path);
                 match processor.process_file(&file_path).await {
@@ -195,7 +205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     // Save combined results
     let output_file = Path::new(&output_dir).join("all_qa.jsonl");
     let mut output = String::new();
@@ -206,8 +216,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     fs::write(&output_file, output)?;
-    println!("Saved {} question-answer pairs to {:?}", all_items.len(), output_file);
+    println!(
+        "Saved {} question-answer pairs to {:?}",
+        all_items.len(),
+        output_file
+    );
     println!("Individual file results saved as [filename]_qa.jsonl in the output directory");
-    
+
     Ok(())
 }

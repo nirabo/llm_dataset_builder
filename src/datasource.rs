@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use regex::Regex;
 use reqwest::Client;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use url::Url;
-use regex::Regex;
-use serde::Deserialize;
 use walkdir::WalkDir;
 
 #[async_trait]
@@ -30,14 +30,16 @@ impl DataSource for UrlSource {
         let client = Client::new();
         let response = client.get(self.url.as_str()).send().await?;
         let content = response.text().await?;
-        
-        let filename = self.url.path_segments()
+
+        let filename = self
+            .url
+            .path_segments()
             .and_then(|segments| segments.last())
             .unwrap_or("downloaded_content.txt");
-            
+
         let output_path = output_dir.join(filename);
         std::fs::write(&output_path, content)?;
-        
+
         Ok(vec![output_path])
     }
 }
@@ -58,9 +60,11 @@ impl LocalSource {
 impl DataSource for LocalSource {
     async fn collect(&self, output_dir: &Path) -> Result<Vec<PathBuf>> {
         let mut collected = Vec::new();
-        
+
         if self.path.is_file() {
-            let filename = self.path.file_name()
+            let filename = self
+                .path
+                .file_name()
                 .ok_or_else(|| anyhow!("Invalid filename"))?;
             let dest_path = output_dir.join(filename);
             std::fs::copy(&self.path, &dest_path)?;
@@ -78,7 +82,7 @@ impl DataSource for LocalSource {
                 }
             }
         }
-        
+
         Ok(collected)
     }
 }
@@ -103,7 +107,7 @@ impl GitHubSource {
     pub fn new(url: &str, _branch: Option<String>, _path: Option<String>) -> Self {
         let re = Regex::new(r"https://github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.*)").unwrap();
         let caps = re.captures(url).expect("Invalid GitHub URL format");
-        
+
         Self {
             owner: caps[1].to_string(),
             repo: caps[2].to_string(),
@@ -125,7 +129,10 @@ impl GitHubSource {
             .await?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Failed to fetch directory contents: {}", response.status()));
+            return Err(anyhow!(
+                "Failed to fetch directory contents: {}",
+                response.status()
+            ));
         }
 
         let contents: Vec<GithubApiContent> = response.json().await?;
@@ -134,10 +141,10 @@ impl GitHubSource {
 
     fn is_supported_file(filename: &str) -> bool {
         let lowercase = filename.to_lowercase();
-        lowercase.ends_with(".md") || 
-        lowercase.ends_with(".txt") ||
-        lowercase.ends_with(".rst") ||
-        lowercase.ends_with(".markdown")
+        lowercase.ends_with(".md")
+            || lowercase.ends_with(".txt")
+            || lowercase.ends_with(".rst")
+            || lowercase.ends_with(".markdown")
     }
 }
 
@@ -157,7 +164,8 @@ impl DataSource for GitHubSource {
 
             if let Some(download_url) = item.download_url {
                 println!("Downloading: {}", item.path);
-                let response = client.get(&download_url)
+                let response = client
+                    .get(&download_url)
                     .header("User-Agent", "rust-github-raw-fetcher")
                     .send()
                     .await?;
@@ -207,7 +215,7 @@ impl DataSource for GitHubReleaseSource {
     async fn collect(&self, output_dir: &Path) -> Result<Vec<PathBuf>> {
         let client = Client::new();
         let url = format!("https://api.github.com/repos/{}/releases", self.repo);
-        
+
         println!("Fetching releases from {}", url);
         let releases: Vec<Release> = client
             .get(&url)
@@ -216,7 +224,7 @@ impl DataSource for GitHubReleaseSource {
             .await?
             .json()
             .await?;
-            
+
         let mut files = Vec::new();
         for release in releases {
             let filename = format!("{}.md", release.tag_name);
@@ -225,7 +233,7 @@ impl DataSource for GitHubReleaseSource {
             println!("Saved release notes for version {}", release.tag_name);
             files.push(file_path);
         }
-        
+
         Ok(files)
     }
 }
