@@ -3,13 +3,15 @@ use dotenv::dotenv;
 use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use llm_dataset_builder::datasource::{
     DataSource, GitHubReleaseSource, GitHubSource, LocalSource, UrlSource,
 };
-use llm_dataset_builder::processor::{DefaultOllamaProcessor, OllamaProcessor};
+use llm_dataset_builder::processor::{
+    DefaultOllamaClient, DefaultOllamaProcessor, OllamaProcessor,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -132,7 +134,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&output_dir)?;
 
     // Initialize processor
-    let processor = DefaultOllamaProcessor::new(ollama_endpoint.clone(), model.clone());
+    let processor = DefaultOllamaProcessor::new_with_client(
+        ollama_endpoint.clone(),
+        model.clone(),
+        Box::new(DefaultOllamaClient::new(ollama_endpoint, model)),
+        Some(PathBuf::from(&output_dir)),
+    );
 
     // Collect data sources
     let sources = if args.test_mode {
