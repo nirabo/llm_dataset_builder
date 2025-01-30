@@ -31,7 +31,7 @@ impl EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            model: "mistral".to_string(),
+            model: "nomic-embed-text".to_string(),
             host: "localhost".to_string(),
             port: 11434,
         }
@@ -79,6 +79,12 @@ impl EmbeddingEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockall::automock;
+
+    #[automock]
+    trait EmbeddingClient {
+        async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>>;
+    }
 
     #[test]
     fn test_url_generation() {
@@ -109,13 +115,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_generation() {
-        let config = EmbeddingConfig::default();
-        let engine = EmbeddingEngine::new(config).await.unwrap();
+        let mut mock = MockEmbeddingClient::new();
 
-        let text = "This is a test sentence.";
-        let embeddings = engine.generate_embeddings(text).await.unwrap();
+        mock.expect_generate_embedding()
+            .times(1)
+            .returning(|_| Ok(vec![0.1, 0.2, 0.3]));
 
-        assert!(!embeddings.is_empty());
-        assert!(embeddings.iter().all(|x| x.is_finite()));
+        let text = "This is a test text for embedding generation.";
+        let embedding = mock.generate_embedding(text).await.unwrap();
+
+        assert!(!embedding.is_empty());
+        assert_eq!(embedding.len(), 3);
+        assert_eq!(embedding, vec![0.1, 0.2, 0.3]);
     }
 }

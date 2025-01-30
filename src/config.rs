@@ -106,36 +106,82 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scopeguard::guard;
+    use std::env;
 
-    #[test]
-    fn test_default_config() {
-        let config = Config::from_env().unwrap();
-
-        // Check default values
-        assert_eq!(config.embedding.model, "nomic-embed-text");
-        assert_eq!(config.llm.model, "mistral");
-        assert_eq!(config.vector_db.collection_name, "documents");
-        assert_eq!(config.processing.batch_size, 32);
-        assert_eq!(config.output.output_dir, "./output");
+    fn clean_env() {
+        env::remove_var("OLLAMA_EMBEDDING_MODEL");
+        env::remove_var("OLLAMA_LLM_MODEL");
+        env::remove_var("OLLAMA_HOST");
+        env::remove_var("OLLAMA_PORT");
+        env::remove_var("OLLAMA_TEMPERATURE");
+        env::remove_var("OLLAMA_TOP_P");
+        env::remove_var("QDRANT_COLLECTION");
+        env::remove_var("QDRANT_HOST");
+        env::remove_var("QDRANT_PORT");
+        env::remove_var("QDRANT_VECTOR_SIZE");
+        env::remove_var("BATCH_SIZE");
+        env::remove_var("MAX_CONCURRENT_REQUESTS");
+        env::remove_var("LOG_LEVEL");
+        env::remove_var("OUTPUT_DIR");
+        env::remove_var("VECTOR_DB_PATH");
     }
 
     #[test]
-    fn test_custom_config() {
-        // Set custom environment variables
-        env::set_var("OLLAMA_EMBEDDING_MODEL", "custom-embed");
-        env::set_var("OLLAMA_LLM_MODEL", "custom-llm");
-        env::set_var("BATCH_SIZE", "64");
+    #[serial_test::serial]
+    fn test_default_config() {
+        clean_env();
+        let _guard = guard((), |_| clean_env());
 
         let config = Config::from_env().unwrap();
 
-        // Check custom values
-        assert_eq!(config.embedding.model, "custom-embed");
-        assert_eq!(config.llm.model, "custom-llm");
-        assert_eq!(config.processing.batch_size, 64);
+        // Check default values
+        assert_eq!(
+            config.embedding.model, "nomic-embed-text",
+            "wrong default embedding model"
+        );
+        assert_eq!(config.llm.model, "mistral", "wrong default llm model");
+        assert_eq!(
+            config.vector_db.collection_name, "documents",
+            "wrong default collection name"
+        );
+        assert_eq!(config.processing.batch_size, 32, "wrong default batch size");
+        assert_eq!(
+            config.output.output_dir, "./output",
+            "wrong default output dir"
+        );
+    }
 
-        // Clean up
-        env::remove_var("OLLAMA_EMBEDDING_MODEL");
-        env::remove_var("OLLAMA_LLM_MODEL");
-        env::remove_var("BATCH_SIZE");
+    #[test]
+    #[serial_test::serial]
+    fn test_custom_config() {
+        clean_env();
+        let _guard = guard((), |_| clean_env());
+
+        // Set custom environment variables
+        env::set_var("OLLAMA_EMBEDDING_MODEL", "custom-embed");
+        env::set_var("OLLAMA_LLM_MODEL", "custom-llm");
+        env::set_var("QDRANT_COLLECTION", "custom-collection");
+        env::set_var("BATCH_SIZE", "64");
+        env::set_var("OUTPUT_DIR", "/custom/output");
+
+        // Create config after setting environment variables
+        let config = Config::from_env().unwrap();
+
+        // Check custom values
+        assert_eq!(
+            config.embedding.model, "custom-embed",
+            "embedding model mismatch"
+        );
+        assert_eq!(config.llm.model, "custom-llm", "llm model mismatch");
+        assert_eq!(
+            config.vector_db.collection_name, "custom-collection",
+            "collection name mismatch"
+        );
+        assert_eq!(config.processing.batch_size, 64, "batch size mismatch");
+        assert_eq!(
+            config.output.output_dir, "/custom/output",
+            "output dir mismatch"
+        );
     }
 }

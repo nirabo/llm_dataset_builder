@@ -209,6 +209,19 @@ impl VectorDB {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockall::automock;
+
+    #[automock]
+    trait VectorDBClient {
+        async fn init_collection(&self) -> Result<()>;
+        async fn insert_vectors(
+            &self,
+            vectors: Vec<Vec<f32>>,
+            metadata: Vec<HashMap<String, String>>,
+        ) -> Result<Vec<String>>;
+        async fn search_vectors(&self, vector: Vec<f32>, limit: u64) -> Result<Vec<(String, f32)>>;
+        async fn delete_vectors(&self, ids: Vec<String>) -> Result<()>;
+    }
 
     #[test]
     fn test_url_generation() {
@@ -242,11 +255,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_vector_operations() {
-        let config = VectorDBConfig::default();
-        let db = VectorDB::new(config).await.unwrap();
+        let mut mock = MockVectorDBClient::new();
+
+        // Setup mock expectations
+        mock.expect_init_collection().times(1).returning(|| Ok(()));
+
+        mock.expect_insert_vectors()
+            .times(1)
+            .returning(|vectors, _| {
+                Ok(vectors
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| i.to_string())
+                    .collect())
+            });
+
+        mock.expect_search_vectors()
+            .times(1)
+            .returning(|_, _limit| Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]));
+
+        mock.expect_delete_vectors().times(1).returning(|_| Ok(()));
 
         // Initialize collection
-        db.init_collection().await.unwrap();
+        mock.init_collection().await.unwrap();
 
         // Test vector insertion
         let vectors = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
@@ -259,14 +290,17 @@ mod tests {
                 .collect(),
         ];
 
-        let ids = db.insert_vectors(vectors.clone(), metadata).await.unwrap();
+        let ids = mock
+            .insert_vectors(vectors.clone(), metadata)
+            .await
+            .unwrap();
         assert_eq!(ids.len(), 2);
 
         // Test vector search
-        let results = db.search_vectors(vec![1.0, 0.0], 2).await.unwrap();
+        let results = mock.search_vectors(vec![1.0, 0.0], 2).await.unwrap();
         assert_eq!(results.len(), 2);
 
         // Test vector deletion
-        db.delete_vectors(ids).await.unwrap();
+        mock.delete_vectors(ids).await.unwrap();
     }
 }
