@@ -16,6 +16,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
     let mut current_section: Option<DocumentNode> = None;
     let mut current_code_block: Option<DocumentNode> = None;
     let mut list_stack: Vec<DocumentNode> = Vec::new();
+    let mut in_code_block = false;
 
     // Initialize parser with all extensions enabled
     let mut options = Options::empty();
@@ -70,6 +71,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
+                in_code_block = true;
                 current_code_block = Some(DocumentNode::new(
                     NodeType::Code,
                     String::new(),
@@ -77,23 +79,40 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     None,
                     0,
                     match kind {
-                        CodeBlockKind::Fenced(lang) => vec![lang.to_string()],
-                        CodeBlockKind::Indented => vec![],
+                        CodeBlockKind::Fenced(lang) => {
+                            let lang_str = lang.to_string();
+                            if !lang_str.is_empty() {
+                                vec![format!("language:{}", lang_str)]
+                            } else {
+                                vec![]
+                            }
+                        }
+                        CodeBlockKind::Indented => vec!["indented".to_string()],
                     },
                 ));
             }
             Event::End(Tag::CodeBlock(_)) => {
-                in_code_block = false;
                 if let Some(mut code_block) = current_code_block.take() {
-                    code_block.content = current_text.clone();
+                    code_block.content = current_text.trim().to_string();
                     graph.add_node(code_block);
                     current_text.clear();
                 }
+                in_code_block = false;
             }
-            Event::Start(Tag::List(_)) => {
+            Event::Start(Tag::List(ordered)) => {
                 // Create a new list node
-                let list_node =
-                    DocumentNode::new(NodeType::List, String::new(), None, None, 0, vec![]);
+                let list_node = DocumentNode::new(
+                    NodeType::List,
+                    String::new(),
+                    None,
+                    None,
+                    0,
+                    if ordered {
+                        vec!["ordered".to_string()]
+                    } else {
+                        vec!["unordered".to_string()]
+                    },
+                );
                 list_stack.push(list_node);
             }
             Event::Start(Tag::Item) => {
