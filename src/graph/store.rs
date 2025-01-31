@@ -70,17 +70,16 @@ impl VectorStore {
     ) -> Result<()> {
         let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)
             .map_err(|e| anyhow!("Failed to parse metadata: {}", e))?;
-            
+
         let ids = self
             .db
             .insert_vectors(vec![embedding], vec![metadata_map])
             .await
             .map_err(|e| anyhow!("Failed to insert embedding: {}", e))?;
-            
+
         if ids.is_empty() {
             anyhow::bail!("No IDs returned from vector insertion");
         }
-        
         Ok(())
     }
 
@@ -135,12 +134,7 @@ mod tests {
             .with(predicate::always(), predicate::eq(2u64))
             .times(1)
             .returning(|_, _| {
-                Box::pin(async move {
-                    Ok(vec![
-                        ("0".to_string(), 0.9), 
-                        ("1".to_string(), 0.8)
-                    ])
-                })
+                Box::pin(async move { Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]) })
             });
 
         let store = VectorStore::new_with_mock(mock);
