@@ -16,8 +16,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
     let mut current_section: Option<DocumentNode> = None;
     let mut current_code_block: Option<DocumentNode> = None;
     let mut list_stack: Vec<DocumentNode> = Vec::new();
-    let mut in_code_block = false;
-
     // Initialize parser with all extensions enabled
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -71,7 +69,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
-                in_code_block = true;
                 current_code_block = Some(DocumentNode::new(
                     NodeType::Code,
                     String::new(),
@@ -97,7 +94,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     graph.add_node(code_block);
                     current_text.clear();
                 }
-                in_code_block = false;
             }
             Event::Start(Tag::List(ordered)) => {
                 // Create a new list node
@@ -145,6 +141,14 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
             }
             Event::End(Tag::List(_)) => {
                 if let Some(list_node) = list_stack.pop() {
+                    if let Some(parent_node) = list_stack.last_mut() {
+                        // Add relationship between parent and list
+                        graph.add_edge(
+                            &parent_node.id.to_string(),
+                            &list_node.id.to_string(),
+                            "contains".to_string(),
+                        );
+                    }
                     graph.add_node(list_node);
                 }
             }

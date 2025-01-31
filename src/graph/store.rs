@@ -64,18 +64,23 @@ impl VectorStore {
 
     pub async fn add_embedding(
         &self,
-        _id: &Uuid,
+        id: &Uuid,
         embedding: Vec<f32>,
         metadata: serde_json::Value,
     ) -> Result<()> {
-        let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)?;
+        let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)
+            .map_err(|e| anyhow!("Failed to parse metadata: {}", e))?;
+            
         let ids = self
             .db
             .insert_vectors(vec![embedding], vec![metadata_map])
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to insert embedding: {}", e))?;
+            
         if ids.is_empty() {
-            anyhow::bail!("Failed to insert embedding");
+            anyhow::bail!("No IDs returned from vector insertion");
         }
+        
         Ok(())
     }
 
