@@ -107,7 +107,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     None,
                     None,
                     0,
-                    if ordered {
+                    if ordered.is_some() {
                         vec!["ordered".to_string()]
                     } else {
                         vec!["unordered".to_string()]
@@ -120,7 +120,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     let item_node = DocumentNode::new(
                         NodeType::ListItem,
                         String::new(),
-                        Some(list_node.id.clone()),
+                        Some(list_node.id.to_string()),
                         None,
                         0,
                         vec![],
@@ -132,7 +132,12 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 if let Some(mut item_node) = list_stack.pop() {
                     if let Some(parent_node) = list_stack.last_mut() {
                         item_node.content = current_text.clone();
-                        parent_node.children.push(item_node.id.clone());
+                        // Add relationship between parent and child nodes
+                        graph.add_edge(
+                            &parent_node.id.to_string(),
+                            &item_node.id.to_string(),
+                            "contains".to_string(),
+                        );
                         graph.add_node(item_node);
                         current_text.clear();
                     }
