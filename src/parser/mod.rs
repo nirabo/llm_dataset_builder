@@ -26,8 +26,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
 
     let parser = Parser::new_ext(content, options);
     let mut current_text = String::new();
-    let mut in_code_block = false;
-    let mut code_block_lang = String::new();
 
     for event in parser {
         match event {
