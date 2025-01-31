@@ -72,18 +72,16 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
-                in_code_block = true;
-                code_block_lang = match kind {
-                    CodeBlockKind::Fenced(lang) => lang.to_string(),
-                    CodeBlockKind::Indented => String::new(),
-                };
                 current_code_block = Some(DocumentNode::new(
                     NodeType::Code,
                     String::new(),
                     None,
                     None,
                     0,
-                    vec![code_block_lang.clone()],
+                    match kind {
+                        CodeBlockKind::Fenced(lang) => vec![lang.to_string()],
+                        CodeBlockKind::Indented => vec![],
+                    },
                 ));
             }
             Event::End(Tag::CodeBlock(_)) => {
@@ -99,6 +97,29 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 let list_node =
                     DocumentNode::new(NodeType::List, String::new(), None, None, 0, vec![]);
                 list_stack.push(list_node);
+            }
+            Event::Start(Tag::Item) => {
+                if let Some(list_node) = list_stack.last_mut() {
+                    let item_node = DocumentNode::new(
+                        NodeType::ListItem,
+                        String::new(),
+                        Some(list_node.id.clone()),
+                        None,
+                        0,
+                        vec![],
+                    );
+                    list_stack.push(item_node);
+                }
+            }
+            Event::End(Tag::Item) => {
+                if let Some(mut item_node) = list_stack.pop() {
+                    if let Some(parent_node) = list_stack.last_mut() {
+                        item_node.content = current_text.clone();
+                        parent_node.children.push(item_node.id.clone());
+                        graph.add_node(item_node);
+                        current_text.clear();
+                    }
+                }
             }
             Event::End(Tag::List(_)) => {
                 if let Some(list_node) = list_stack.pop() {
