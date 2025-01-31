@@ -96,7 +96,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 }
             }
             Event::Start(Tag::List(ordered)) => {
-                // Create a new list node
                 let list_node = DocumentNode::new(
                     NodeType::List,
                     String::new(),
@@ -111,6 +110,7 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 );
                 list_stack.push(list_node);
             }
+
             Event::Start(Tag::Item) => {
                 if let Some(list_node) = list_stack.last_mut() {
                     let item_node = DocumentNode::new(
@@ -124,11 +124,11 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     list_stack.push(item_node);
                 }
             }
+
             Event::End(Tag::Item) => {
                 if let Some(mut item_node) = list_stack.pop() {
                     if let Some(parent_node) = list_stack.last_mut() {
-                        item_node.content = current_text.clone();
-                        // Add relationship between parent and child nodes
+                        item_node.content = current_text.trim().to_string();
                         graph.add_edge(
                             &parent_node.id.to_string(),
                             &item_node.id.to_string(),
@@ -139,10 +139,10 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                     }
                 }
             }
+
             Event::End(Tag::List(_)) => {
                 if let Some(list_node) = list_stack.pop() {
                     if let Some(parent_node) = list_stack.last_mut() {
-                        // Add relationship between parent and list
                         graph.add_edge(
                             &parent_node.id.to_string(),
                             &list_node.id.to_string(),

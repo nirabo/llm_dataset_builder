@@ -135,7 +135,12 @@ mod tests {
             .with(predicate::always(), predicate::eq(2u64))
             .times(1)
             .returning(|_, _| {
-                Box::pin(async move { Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]) })
+                Box::pin(async move {
+                    Ok(vec![
+                        ("0".to_string(), 0.9), 
+                        ("1".to_string(), 0.8)
+                    ])
+                })
             });
 
         let store = VectorStore::new_with_mock(mock);
