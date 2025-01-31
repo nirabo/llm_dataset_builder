@@ -81,7 +81,7 @@ impl VectorStore {
 
     pub async fn search_similar(
         &self,
-        embedding: &[f32], 
+        embedding: &[f32],
         limit: u64,
     ) -> Result<Vec<(String, f32)>> {
         self.db.search_vectors(embedding.to_vec(), limit).await
@@ -129,7 +129,9 @@ mod tests {
         mock.expect_search_vectors()
             .with(predicate::always(), predicate::eq(2u64))
             .times(1)
-            .returning(|_, _| Box::pin(async move { Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]) }));
+            .returning(|_, _| {
+                Box::pin(async move { Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]) })
+            });
 
         let store = VectorStore::new_with_mock(mock);
 
