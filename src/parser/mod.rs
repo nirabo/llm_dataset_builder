@@ -108,11 +108,12 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                         vec!["unordered".to_string()]
                     },
                 );
+                graph.add_node(list_node.clone());
                 list_stack.push(list_node);
             }
 
             Event::Start(Tag::Item) => {
-                if let Some(list_node) = list_stack.last_mut() {
+                if let Some(list_node) = list_stack.last() {
                     let item_node = DocumentNode::new(
                         NodeType::ListItem,
                         String::new(),
@@ -127,29 +128,22 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
 
             Event::End(Tag::Item) => {
                 if let Some(mut item_node) = list_stack.pop() {
-                    if let Some(parent_node) = list_stack.last_mut() {
+                    if let Some(parent_node) = list_stack.last() {
                         item_node.content = current_text.trim().to_string();
+                        graph.add_node(item_node.clone());
                         graph.add_edge(DocumentEdge::new(
                             parent_node.id,
                             item_node.id,
                             RelationType::Contains,
                         ))?;
-                        graph.add_node(item_node);
                         current_text.clear();
                     }
                 }
             }
 
             Event::End(Tag::List(_)) => {
-                if let Some(list_node) = list_stack.pop() {
-                    if let Some(parent_node) = list_stack.last_mut() {
-                        graph.add_edge(DocumentEdge::new(
-                            parent_node.id,
-                            list_node.id,
-                            RelationType::Contains,
-                        ))?;
-                    }
-                    graph.add_node(list_node);
+                if let Some(_list_node) = list_stack.pop() {
+                    // List node is already added to the graph
                 }
             }
             Event::Text(text) => {

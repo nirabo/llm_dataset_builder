@@ -2,9 +2,8 @@
 use crate::external::vectordb::VectorDB;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use serde_json::Value;
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -24,6 +23,7 @@ pub trait VectorDBTrait {
 }
 
 #[cfg(not(test))]
+#[async_trait]
 impl VectorDBTrait for VectorDB {
     async fn init_collection(&self) -> Result<()> {
         self.init_collection().await
@@ -50,13 +50,16 @@ pub struct VectorStore {
     #[cfg(not(test))]
     db: VectorDB,
     #[cfg(test)]
-    db: MockVectorDBTrait,
+    db: Box<dyn VectorDBTrait>,
     collection_name: String,
 }
 
 impl VectorStore {
     #[cfg(not(test))]
-    pub async fn new(config: crate::external::vectordb::VectorDBConfig, collection_name: &str) -> Result<Self> {
+    pub async fn new(
+        config: crate::external::vectordb::VectorDBConfig,
+        collection_name: &str,
+    ) -> Result<Self> {
         let db = VectorDB::new(config).await?;
         db.init_collection().await?;
         Ok(Self {
@@ -66,11 +69,13 @@ impl VectorStore {
     }
 
     #[cfg(test)]
-    pub fn new_with_mock(mock: MockVectorDBTrait, collection_name: &str) -> Self {
-        Self {
-            db: mock,
+    pub async fn new_with_mock(mock: MockVectorDBTrait, collection_name: &str) -> Self {
+        let store = Self {
+            db: Box::new(mock),
             collection_name: collection_name.to_string(),
-        }
+        };
+        store.db.init_collection().await.unwrap();
+        store
     }
 
     pub async fn add_embedding(
@@ -85,13 +90,9 @@ impl VectorStore {
         let ids = self
             .db
             .insert_vectors(vec![embedding], vec![metadata_map])
-<<<<<<< HEAD
-            .await?;
-=======
             .await
             .map_err(|e| anyhow!("Failed to insert embedding: {}", e))?;
 
->>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
         if ids.is_empty() {
             anyhow::bail!("No IDs returned from vector insertion");
         }
@@ -99,15 +100,11 @@ impl VectorStore {
         Ok(())
     }
 
-<<<<<<< HEAD
-    pub async fn search_similar(&self, embedding: &[f32], limit: u64) -> Result<Vec<(String, f32)>> {
-=======
     pub async fn search_similar(
         &self,
         embedding: &[f32],
         limit: u64,
     ) -> Result<Vec<(String, f32)>> {
->>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
         self.db.search_vectors(embedding.to_vec(), limit).await
     }
 
@@ -119,20 +116,15 @@ impl VectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockall::predicate::*;
+    use mockall::predicate;
 
     #[tokio::test]
     async fn test_vector_store_creation() {
         let mut mock = MockVectorDBTrait::new();
         mock.expect_init_collection().times(1).returning(|| Ok(()));
 
-<<<<<<< HEAD
-        let store = VectorStore::new_with_mock(mock, "test_collection");
+        let store = VectorStore::new_with_mock(mock, "test_collection").await;
         assert_eq!(store.collection_name, "test_collection");
-=======
-        let store = VectorStore::new_with_mock(mock);
-        assert!(store.db.init_collection().await.is_ok());
->>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
     }
 
     #[tokio::test]
@@ -140,6 +132,7 @@ mod tests {
         let mut mock = MockVectorDBTrait::new();
 
         // Setup expectations
+        mock.expect_init_collection().times(1).returning(|| Ok(()));
         mock.expect_insert_vectors()
             .with(predicate::always(), predicate::always())
             .times(1)
@@ -157,7 +150,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]));
 
-        let store = VectorStore::new_with_mock(mock, "test_collection");
+        let store = VectorStore::new_with_mock(mock, "test_collection").await;
 
         // Test storing embeddings
         let id = Uuid::new_v4();
