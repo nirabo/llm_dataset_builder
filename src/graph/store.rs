@@ -51,6 +51,7 @@ pub struct VectorStore {
     db: VectorDB,
     #[cfg(test)]
     db: Box<dyn VectorDBTrait>,
+    #[allow(dead_code)]
     collection_name: String,
 }
 
