@@ -8,3 +8,4 @@ Cargo.lock
 /.venv/
 processed_data.json
 tarpaulin-report.html
+.aider*

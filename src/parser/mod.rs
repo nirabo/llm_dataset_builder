@@ -2,7 +2,7 @@ use anyhow::Result;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
 use std::path::Path;
 
-use crate::graph::{node::NodeType, DocumentGraph, DocumentNode};
+use crate::graph::{edge::RelationType, node::NodeType, DocumentEdge, DocumentGraph, DocumentNode};
 
 /// Parse a markdown file into a document graph
 pub fn parse_markdown_file(path: &Path) -> Result<DocumentGraph> {
@@ -16,7 +16,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
     let mut current_section: Option<DocumentNode> = None;
     let mut current_code_block: Option<DocumentNode> = None;
     let mut list_stack: Vec<DocumentNode> = Vec::new();
-
     // Initialize parser with all extensions enabled
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -26,8 +25,6 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
 
     let parser = Parser::new_ext(content, options);
     let mut current_text = String::new();
-    let mut in_code_block = false;
-    let mut code_block_lang = String::new();
 
     for event in parser {
         match event {
@@ -72,48 +69,101 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
-                in_code_block = true;
-                code_block_lang = match kind {
-                    CodeBlockKind::Fenced(lang) => lang.to_string(),
-                    CodeBlockKind::Indented => String::new(),
-                };
                 current_code_block = Some(DocumentNode::new(
                     NodeType::Code,
                     String::new(),
                     None,
                     None,
                     0,
-                    vec![code_block_lang.clone()],
+                    match kind {
+                        CodeBlockKind::Fenced(lang) => {
+                            let lang_str = lang.to_string();
+                            if !lang_str.is_empty() {
+                                vec![format!("language:{}", lang_str)]
+                            } else {
+                                vec![]
+                            }
+                        }
+                        CodeBlockKind::Indented => vec!["indented".to_string()],
+                    },
                 ));
             }
             Event::End(Tag::CodeBlock(_)) => {
-                in_code_block = false;
                 if let Some(mut code_block) = current_code_block.take() {
-                    code_block.content = current_text.clone();
+                    code_block.content = current_text.trim().to_string();
                     graph.add_node(code_block);
                     current_text.clear();
                 }
             }
-            Event::Start(Tag::List(_)) => {
-                // Create a new list node
-                let list_node =
-                    DocumentNode::new(NodeType::List, String::new(), None, None, 0, vec![]);
+            Event::Start(Tag::List(ordered)) => {
+                let list_node = DocumentNode::new(
+                    NodeType::List,
+                    String::new(),
+                    None,
+                    None,
+                    0,
+                    if ordered.is_some() {
+                        vec!["ordered".to_string()]
+                    } else {
+                        vec!["unordered".to_string()]
+                    },
+                );
                 list_stack.push(list_node);
             }
+
+            Event::Start(Tag::Item) => {
+                if let Some(list_node) = list_stack.last_mut() {
+                    let item_node = DocumentNode::new(
+                        NodeType::ListItem,
+                        String::new(),
+                        Some(list_node.id.to_string()),
+                        None,
+                        0,
+                        vec![],
+                    );
+                    list_stack.push(item_node);
+                }
+            }
+
+            Event::End(Tag::Item) => {
+                if let Some(mut item_node) = list_stack.pop() {
+                    if let Some(parent_node) = list_stack.last_mut() {
+                        item_node.content = current_text.trim().to_string();
+                        graph.add_edge(DocumentEdge::new(
+                            parent_node.id,
+                            item_node.id,
+                            RelationType::Contains,
+                        ))?;
+                        graph.add_node(item_node);
+                        current_text.clear();
+                    }
+                }
+            }
+
             Event::End(Tag::List(_)) => {
                 if let Some(list_node) = list_stack.pop() {
+                    if let Some(parent_node) = list_stack.last_mut() {
+                        graph.add_edge(DocumentEdge::new(
+                            parent_node.id,
+                            list_node.id,
+                            RelationType::Contains,
+                        ))?;
+                    }
                     graph.add_node(list_node);
                 }
             }
             Event::Text(text) => {
+                // Accumulate text content
                 current_text.push_str(&text);
             }
             Event::Code(code) => {
+                // Handle inline code blocks
                 current_text.push('`');
                 current_text.push_str(&code);
                 current_text.push('`');
             }
             Event::SoftBreak | Event::HardBreak => {
+                // Handle line breaks
                 current_text.push('\n');
             }
             _ => {}

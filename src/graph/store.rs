@@ -1,46 +1,48 @@
 #[cfg(not(test))]
 use crate::external::vectordb::VectorDB;
-use anyhow::Result;
-use qdrant_client::prelude::*;
-use serde_json::Value;
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use uuid::Uuid;
 
 #[cfg(test)]
 use mockall::automock;
 
 #[cfg_attr(test, automock)]
+#[async_trait]
 pub trait VectorDBTrait {
-    fn init_collection(&self) -> Result<()>;
-    fn insert_vectors(
+    async fn init_collection(&self) -> Result<()>;
+    async fn insert_vectors(
         &self,
         vectors: Vec<Vec<f32>>,
         metadata: Vec<HashMap<String, String>>,
     ) -> Result<Vec<String>>;
-    fn search_vectors(&self, vector: Vec<f32>, limit: u64) -> Result<Vec<(String, f32)>>;
-    fn delete_vectors(&self, ids: Vec<String>) -> Result<()>;
+    async fn search_vectors(&self, vector: Vec<f32>, limit: u64) -> Result<Vec<(String, f32)>>;
+    async fn delete_vectors(&self, ids: Vec<String>) -> Result<()>;
 }
 
 #[cfg(not(test))]
 impl VectorDBTrait for VectorDB {
-    fn init_collection(&self) -> Result<()> {
-        tokio::runtime::Runtime::new()?.block_on(self.init_collection())
+    async fn init_collection(&self) -> Result<()> {
+        self.init_collection().await
     }
 
-    fn insert_vectors(
+    async fn insert_vectors(
         &self,
         vectors: Vec<Vec<f32>>,
         metadata: Vec<HashMap<String, String>>,
     ) -> Result<Vec<String>> {
-        tokio::runtime::Runtime::new()?.block_on(self.insert_vectors(vectors, metadata))
+        self.insert_vectors(vectors, metadata).await
     }
 
-    fn search_vectors(&self, vector: Vec<f32>, limit: u64) -> Result<Vec<(String, f32)>> {
-        tokio::runtime::Runtime::new()?.block_on(self.search_vectors(vector, limit))
+    async fn search_vectors(&self, vector: Vec<f32>, limit: u64) -> Result<Vec<(String, f32)>> {
+        self.search_vectors(vector, limit).await
     }
 
-    fn delete_vectors(&self, ids: Vec<String>) -> Result<()> {
-        tokio::runtime::Runtime::new()?.block_on(self.delete_vectors(ids))
+    async fn delete_vectors(&self, ids: Vec<String>) -> Result<()> {
+        self.delete_vectors(ids).await
     }
 }
 
@@ -77,18 +79,35 @@ impl VectorStore {
         embedding: Vec<f32>,
         metadata: Value,
     ) -> Result<()> {
-        let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)?;
+        let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)
+            .map_err(|e| anyhow!("Failed to parse metadata: {}", e))?;
+
         let ids = self
             .db
             .insert_vectors(vec![embedding], vec![metadata_map])
+<<<<<<< HEAD
             .await?;
+=======
+            .await
+            .map_err(|e| anyhow!("Failed to insert embedding: {}", e))?;
+
+>>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
         if ids.is_empty() {
-            anyhow::bail!("Failed to insert embedding");
+            anyhow::bail!("No IDs returned from vector insertion");
         }
+
         Ok(())
     }
 
+<<<<<<< HEAD
     pub async fn search_similar(&self, embedding: &[f32], limit: u64) -> Result<Vec<(String, f32)>> {
+=======
+    pub async fn search_similar(
+        &self,
+        embedding: &[f32],
+        limit: u64,
+    ) -> Result<Vec<(String, f32)>> {
+>>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
         self.db.search_vectors(embedding.to_vec(), limit).await
     }
 
@@ -107,8 +126,13 @@ mod tests {
         let mut mock = MockVectorDBTrait::new();
         mock.expect_init_collection().times(1).returning(|| Ok(()));
 
+<<<<<<< HEAD
         let store = VectorStore::new_with_mock(mock, "test_collection");
         assert_eq!(store.collection_name, "test_collection");
+=======
+        let store = VectorStore::new_with_mock(mock);
+        assert!(store.db.init_collection().await.is_ok());
+>>>>>>> 372cbf44826501076c1a2232f3d6845df202e89c
     }
 
     #[tokio::test]
@@ -120,11 +144,12 @@ mod tests {
             .with(predicate::always(), predicate::always())
             .times(1)
             .returning(|vectors, _| {
-                Ok(vectors
+                let result = vectors
                     .iter()
                     .enumerate()
                     .map(|(i, _)| i.to_string())
-                    .collect())
+                    .collect();
+                Ok(result)
             });
 
         mock.expect_search_vectors()
