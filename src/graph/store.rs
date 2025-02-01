@@ -1,13 +1,17 @@
 #[cfg(not(test))]
 use crate::external::vectordb::VectorDB;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use uuid::Uuid;
 
 #[cfg(test)]
 use mockall::automock;
 
 #[cfg_attr(test, automock)]
+#[async_trait]
 pub trait VectorDBTrait {
     async fn init_collection(&self) -> Result<()>;
     async fn insert_vectors(
@@ -64,23 +68,23 @@ impl VectorStore {
 
     pub async fn add_embedding(
         &self,
-        id: &Uuid,
+        _id: &Uuid,
         embedding: Vec<f32>,
         metadata: serde_json::Value,
     ) -> Result<()> {
         let metadata_map: HashMap<String, String> = serde_json::from_value(metadata)
             .map_err(|e| anyhow!("Failed to parse metadata: {}", e))?;
-            
+
         let ids = self
             .db
             .insert_vectors(vec![embedding], vec![metadata_map])
             .await
             .map_err(|e| anyhow!("Failed to insert embedding: {}", e))?;
-            
+
         if ids.is_empty() {
             anyhow::bail!("No IDs returned from vector insertion");
         }
-        
+
         Ok(())
     }
 
@@ -105,9 +109,7 @@ mod tests {
     #[tokio::test]
     async fn test_vector_store_creation() {
         let mut mock = MockVectorDBTrait::new();
-        mock.expect_init_collection()
-            .times(1)
-            .returning(|| Box::pin(async { Ok(()) }));
+        mock.expect_init_collection().times(1).returning(|| Ok(()));
 
         let store = VectorStore::new_with_mock(mock);
         assert!(store.db.init_collection().await.is_ok());
@@ -122,26 +124,18 @@ mod tests {
             .with(predicate::always(), predicate::always())
             .times(1)
             .returning(|vectors, _| {
-                Box::pin(async move {
-                    Ok(vectors
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| i.to_string())
-                        .collect())
-                })
+                let result = vectors
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| i.to_string())
+                    .collect();
+                Ok(result)
             });
 
         mock.expect_search_vectors()
             .with(predicate::always(), predicate::eq(2u64))
             .times(1)
-            .returning(|_, _| {
-                Box::pin(async move {
-                    Ok(vec![
-                        ("0".to_string(), 0.9), 
-                        ("1".to_string(), 0.8)
-                    ])
-                })
-            });
+            .returning(|_, _| Ok(vec![("0".to_string(), 0.9), ("1".to_string(), 0.8)]));
 
         let store = VectorStore::new_with_mock(mock);
 

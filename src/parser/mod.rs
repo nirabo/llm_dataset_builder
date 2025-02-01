@@ -2,7 +2,7 @@ use anyhow::Result;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
 use std::path::Path;
 
-use crate::graph::{node::NodeType, DocumentGraph, DocumentNode};
+use crate::graph::{edge::RelationType, node::NodeType, DocumentEdge, DocumentGraph, DocumentNode};
 
 /// Parse a markdown file into a document graph
 pub fn parse_markdown_file(path: &Path) -> Result<DocumentGraph> {
@@ -129,11 +129,11 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
                 if let Some(mut item_node) = list_stack.pop() {
                     if let Some(parent_node) = list_stack.last_mut() {
                         item_node.content = current_text.trim().to_string();
-                        graph.add_edge(
-                            &parent_node.id.to_string(),
-                            &item_node.id.to_string(),
-                            "contains".to_string(),
-                        );
+                        graph.add_edge(DocumentEdge::new(
+                            parent_node.id,
+                            item_node.id,
+                            RelationType::Contains,
+                        ))?;
                         graph.add_node(item_node);
                         current_text.clear();
                     }
@@ -143,11 +143,11 @@ pub fn parse_markdown(content: &str) -> Result<DocumentGraph> {
             Event::End(Tag::List(_)) => {
                 if let Some(list_node) = list_stack.pop() {
                     if let Some(parent_node) = list_stack.last_mut() {
-                        graph.add_edge(
-                            &parent_node.id.to_string(),
-                            &list_node.id.to_string(),
-                            "contains".to_string(),
-                        );
+                        graph.add_edge(DocumentEdge::new(
+                            parent_node.id,
+                            list_node.id,
+                            RelationType::Contains,
+                        ))?;
                     }
                     graph.add_node(list_node);
                 }
